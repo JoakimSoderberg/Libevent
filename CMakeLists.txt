@@ -68,7 +68,7 @@ include(CheckStructHasMember)
 
 include(FindZLIB)    # -> HAVE_LIBZ
 include(FindThreads) # -> HAVE_PTHREAD
-include(FindOpenSSL)
+#include(FindOpenSSL)
 include(FindPythonInterp) 
 
 if(WIN32)
