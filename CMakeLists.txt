@@ -1,11 +1,57 @@
-# -----------------------------------------------------------------------------
-# Copyright (c) 2009 Cross Language Inc., All Rights Reserved.
+# Using cmake to build libevent2
+#   * install cmake 2.6 or 2.8
+#   * update the cmake file CheckFunctionExists as detailed below
+#   * delete the Win32-Code/event-config.h file
+#   * make a build directory and execute cmake using the appropriate generator.
+#     See cmake /? for a list of generators.
+#   * The Visual Studio project will be generated as build/libevent2.sln
 #
-# vendor/libevent
-# -----------------------------------------------------------------------------
+#   For example:
+#
+#       cd libevent2
+#       md build
+#       cd build
+#       cmake -G "Visual Studio 9 2008" ..
+#       start libevent2.sln
+#
+# CheckFunctionExists
+# ===================
+# Windows requires a changed to the CMAKE standard module for the function 
+# "CheckFunctionExists.c". This is because if the function is in a DLL
+# (e.g. system functions like getaddrinfo), then linking to that function
+# will fail unless it is declared in the test program with the correct 
+# signature. Therefore, replace the CheckFunctionExists.c function in the
+# cmake directory with the following:
+#
+#   #ifdef CHECK_FUNCTION_EXISTS
+#   #ifdef __CLASSIC_C__
+#   int main(){ int ac; char*av[];
+#   #else
+#   int main(int ac, char*av[]){
+#   #endif
+#     void * p = &CHECK_FUNCTION_EXISTS;
+#     if(ac > 1000) return *av[0];
+#     return 0;
+#   }
+#   #else  /* CHECK_FUNCTION_EXISTS */
+#   #  error "CHECK_FUNCTION_EXISTS has to specify the function"
+#   #endif /* CHECK_FUNCTION_EXISTS */
+#
+
 cmake_minimum_required(VERSION 2.6.0 FATAL_ERROR)
 
-project(libevent)
+# get rid of the extra default configurations
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Limited configurations" FORCE)
+
+project(libevent2)
+
+set(EVENT_NUMERIC_VERSION 0x02010101)
+set(EVENT_VERSION "2.1.1-alpha")
+set(EVENT_PACKAGE_VERSION "")
+
+OPTION(EVENT__DISABLE_DEBUG_MODE "Define if libevent should build without support for a debug mode" 0)
+OPTION(EVENT__DISABLE_MM_REPLACEMENT "Define if libevent should not allow replacing the mm functions" 0)
+OPTION(EVENT__DISABLE_THREAD_SUPPORT "Define if libevent should not be compiled with thread support" 0)
 
 # Put the libaries and binaries that get built into directories at the
 # top of the build tree rather than in hard-to-find leaf directories. 
@@ -13,43 +59,415 @@ SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 SET(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 SET(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 
-# -----------------------------------------------------------------------------
+include(CheckFunctionExists)
+include(CheckIncludeFile)
+include(CheckTypeSize)
+include(CheckVariableExists)
+include(CheckSymbolExists)
+include(CheckStructHasMember)
+
+include(FindZLIB)    # -> HAVE_LIBZ
+include(FindThreads) # -> HAVE_PTHREAD
+include(FindOpenSSL)
+include(FindPythonInterp) 
 
 if(WIN32)
-    include_directories(BEFORE WIN32-Code compat .)
-    add_definitions(/DHAVE_CONFIG_H /D_CRT_SECURE_NO_DEPRECATE)
-    set(EXTRA_FILES WIN32-Code/win32.c WIN32-Code/config.h WIN32-Code/event-config.h)
+    set(CMAKE_EXTRA_INCLUDE_FILES winsock2.h ws2tcpip.h)
+    set(CMAKE_REQUIRED_LIBRARIES  ws2_32.lib)
+    set(CMAKE_REQUIRED_DEFINITIONS -FIwinsock2.h -FIws2tcpip.h)
 endif()
 
-add_library(libevent STATIC
-    buffer.c
-    evbuffer.c
-    evdns.c
-    event.c
-    event_tagging.c
-    evrpc.c
-    evutil.c
-    http.c
-    log.c
-    signal.c
-    strlcpy.c
-    evdns.h
+CHECK_INCLUDE_FILE(sys/types.h EVENT__HAVE_SYS_TYPES_H)
+if(EVENT__HAVE_SYS_TYPES_H)
+    list(APPEND CMAKE_EXTRA_INCLUDE_FILES sys/types.h)
+endif()
+
+CHECK_INCLUDE_FILE(sys/socket.h EVENT__HAVE_SYS_SOCKET_H)
+if(EVENT__HAVE_SYS_SOCKET_H)
+    list(APPEND CMAKE_EXTRA_INCLUDE_FILES sys/socket.h)
+endif()
+
+CHECK_INCLUDE_FILE(netinet/in.h EVENT__HAVE_NETINET_IN_H)
+if(EVENT__HAVE_NETINET_IN_H)
+    list(APPEND CMAKE_EXTRA_INCLUDE_FILES netinet/in.h)
+endif()
+
+CHECK_INCLUDE_FILE(netinet/in6.h EVENT__HAVE_NETINET_IN6_H)
+if(EVENT__HAVE_NETINET_IN6_H)
+    list(APPEND CMAKE_EXTRA_INCLUDE_FILES netinet/in6.h)
+endif()
+
+CHECK_FUNCTION_EXISTS(epoll_create EVENT__HAVE_EPOLL)
+CHECK_FUNCTION_EXISTS(epoll_ctl EVENT__HAVE_EPOLL_CTL)
+CHECK_FUNCTION_EXISTS(eventfd EVENT__HAVE_EVENTFD)
+CHECK_FUNCTION_EXISTS(clock_gettime EVENT__HAVE_CLOCK_GETTIME)
+CHECK_FUNCTION_EXISTS(fcntl EVENT__HAVE_FCNTL)
+CHECK_FUNCTION_EXISTS(getaddrinfo EVENT__HAVE_GETADDRINFO)
+CHECK_FUNCTION_EXISTS(getnameinfo EVENT__HAVE_GETNAMEINFO)
+CHECK_FUNCTION_EXISTS(gettimeofday EVENT__HAVE_GETTIMEOFDAY)
+CHECK_FUNCTION_EXISTS(getprotobynumber EVENT__HAVE_GETPROTOBYNUMBER)
+CHECK_FUNCTION_EXISTS(getservbyname EVENT__HAVE_GETSERVBYNAME)
+CHECK_FUNCTION_EXISTS(inet_aton EVENT__HAVE_INET_ATON)
+CHECK_FUNCTION_EXISTS(inet_ntop EVENT__HAVE_INET_NTOP)
+CHECK_FUNCTION_EXISTS(inet_pton EVENT__HAVE_INET_PTON)
+CHECK_FUNCTION_EXISTS(kqueue EVENT__HAVE_KQUEUE)
+CHECK_FUNCTION_EXISTS(mmap EVENT__HAVE_MMAP)
+CHECK_FUNCTION_EXISTS(pipe EVENT__HAVE_PIPE)
+CHECK_FUNCTION_EXISTS(poll EVENT__HAVE_POLL)
+CHECK_FUNCTION_EXISTS(port_create EVENT__HAVE_PORT_CREATE)
+CHECK_FUNCTION_EXISTS(sendfile EVENT__HAVE_SENDFILE)
+CHECK_FUNCTION_EXISTS(sigaction EVENT__HAVE_SIGACTION)
+CHECK_FUNCTION_EXISTS(signal EVENT__HAVE_SIGNAL)
+CHECK_FUNCTION_EXISTS(splice EVENT__HAVE_SPLICE)
+CHECK_FUNCTION_EXISTS(strlcpy EVENT__HAVE_STRLCPY)
+CHECK_FUNCTION_EXISTS(strsep EVENT__HAVE_STRSEP)
+CHECK_FUNCTION_EXISTS(strtok_r EVENT__HAVE_STRTOK_R)
+CHECK_FUNCTION_EXISTS(strtoll EVENT__HAVE_STRTOLL)
+CHECK_FUNCTION_EXISTS(vasprintf EVENT__HAVE_VASPRINTF)
+CHECK_FUNCTION_EXISTS(sysctl EVENT__HAVE_SYSCTL)
+CHECK_FUNCTION_EXISTS(accept4 EVENT__HAVE_ACCEPT4)
+CHECK_FUNCTION_EXISTS(arc4random EVENT__HAVE_ARC4RANDOM)
+CHECK_FUNCTION_EXISTS(arc4random_buf EVENT__HAVE_ARC4RANDOM_BUF)
+CHECK_FUNCTION_EXISTS(epoll_create1 EVENT__HAVE_EPOLL_CREATE1)
+CHECK_FUNCTION_EXISTS(getegid EVENT__HAVE_GETEGID)
+CHECK_FUNCTION_EXISTS(geteuid EVENT__HAVE_GETEUID)
+CHECK_FUNCTION_EXISTS(getifaddrs EVENT__HAVE_GETIFADDRS)
+CHECK_FUNCTION_EXISTS(issetugid EVENT__HAVE_ISSETUGID)
+CHECK_FUNCTION_EXISTS(mach_absolute_time EVENT__HAVE_MACH_ABSOLUTE_TIME)
+CHECK_FUNCTION_EXISTS(nanosleep EVENT__HAVE_NANOSLEEP)
+if(NOT WIN32)
+CHECK_FUNCTION_EXISTS(select EVENT__HAVE_SELECT)
+endif()
+
+CHECK_INCLUDE_FILE(netdb.h EVENT__HAVE_NETDB_H)
+CHECK_INCLUDE_FILE(dlfcn.h EVENT__HAVE_DLFCN_H)
+CHECK_INCLUDE_FILE(arpa/inet.h EVENT__HAVE_ARPA_INET_H)
+CHECK_INCLUDE_FILE(fcntl.h EVENT__HAVE_FCNTL_H)
+CHECK_INCLUDE_FILE(inttypes.h EVENT__HAVE_INTTYPES_H)
+CHECK_INCLUDE_FILE(memory.h EVENT__HAVE_MEMORY_H)
+CHECK_INCLUDE_FILE(poll.h EVENT__HAVE_POLL_H)
+CHECK_INCLUDE_FILE(port.h EVENT__HAVE_PORT_H)
+CHECK_INCLUDE_FILE(signal.h EVENT__HAVE_SIGNAL_H)
+CHECK_INCLUDE_FILE(stdarg.h EVENT__HAVE_STDARG_H)
+CHECK_INCLUDE_FILE(stddef.h EVENT__HAVE_STDDEF_H)
+CHECK_INCLUDE_FILE(stdint.h EVENT__HAVE_STDINT_H)
+CHECK_INCLUDE_FILE(stdlib.h EVENT__HAVE_STDLIB_H)
+CHECK_INCLUDE_FILE(strings.h EVENT__HAVE_STRINGS_H)
+CHECK_INCLUDE_FILE(string.h EVENT__HAVE_STRING_H)
+CHECK_INCLUDE_FILE(sys/devpoll.h EVENT__HAVE_SYS_DEVPOLL_H)
+CHECK_INCLUDE_FILE(sys/epoll.h EVENT__HAVE_SYS_EPOLL_H)
+CHECK_INCLUDE_FILE(sys/eventfd.h EVENT__HAVE_SYS_EVENTFD_H)
+CHECK_INCLUDE_FILE(sys/event.h EVENT__HAVE_SYS_EVENT_H)
+CHECK_INCLUDE_FILE(sys/ioctl.h EVENT__HAVE_SYS_IOCTL_H)
+CHECK_INCLUDE_FILE(sys/mman.h EVENT__HAVE_SYS_MMAN_H)
+CHECK_INCLUDE_FILE(sys/param.h EVENT__HAVE_SYS_PARAM_H)
+CHECK_INCLUDE_FILE(sys/queue.h EVENT__HAVE_SYS_QUEUE_H)
+CHECK_INCLUDE_FILE(sys/select.h EVENT__HAVE_SYS_SELECT_H)
+CHECK_INCLUDE_FILE(sys/sendfile.h EVENT__HAVE_SYS_SENDFILE_H)
+CHECK_INCLUDE_FILE(sys/stat.h EVENT__HAVE_SYS_STAT_H)
+CHECK_INCLUDE_FILE(sys/time.h EVENT__HAVE_SYS_TIME_H)
+CHECK_INCLUDE_FILE(sys/uio.h EVENT__HAVE_SYS_UIO_H)
+CHECK_INCLUDE_FILE(ifaddrs.h EVENT__HAVE_IFADDRS_H)
+CHECK_INCLUDE_FILE(mach/mach_time.h EVENT__HAVE_MACH_MACH_TIME_H)
+CHECK_INCLUDE_FILE(netdb.h EVENT__HAVE_NETDB_H)
+CHECK_INCLUDE_FILE(netinet/tcp.h EVENT__HAVE_NETINET_TCP_H)
+
+CHECK_TYPE_SIZE(short EVENT__SIZEOF_SHORT BUILTIN_TYPES_ONLY)
+CHECK_TYPE_SIZE(int EVENT__SIZEOF_INT BUILTIN_TYPES_ONLY)
+CHECK_TYPE_SIZE(unsigned EVENT__SIZEOF_UNSIGNED BUILTIN_TYPES_ONLY)
+CHECK_TYPE_SIZE("unsigned int" EVENT__SIZEOF_UNSIGNED_INT BUILTIN_TYPES_ONLY)
+CHECK_TYPE_SIZE(long EVENT__SIZEOF_LONG BUILTIN_TYPES_ONLY)
+CHECK_TYPE_SIZE("long long" EVENT__SIZEOF_LONG_LONG BUILTIN_TYPES_ONLY)
+
+if(WIN32)
+    set(EVENT____func__ __FUNCTION__)
+    set(EVENT__inline   __inline)
+else()
+    set(EVENT____func__ __func__)
+    set(EVENT__inline   __inline__)
+endif()
+
+CHECK_SYMBOL_EXISTS(TAILQ_FOREACH sys/queue.h EVENT__HAVE_TAILQFOREACH)
+CHECK_SYMBOL_EXISTS(CTL_KERN sys/sysctl.h EVENT__HAVE_DECL_CTL_KERN)
+CHECK_SYMBOL_EXISTS(KERN_ARND sys/sysctl.h EVENT__HAVE_DECL_KERN_ARND)
+CHECK_SYMBOL_EXISTS(KERN_RANDOM sys/sysctl.h EVENT__HAVE_DECL_KERN_RANDOM)
+CHECK_SYMBOL_EXISTS(RANDOM_UUID sys/sysctl.h EVENT__HAVE_DECL_RANDOM_UUID)
+
+CHECK_TYPE_SIZE(fd_mask EVENT__HAVE_FD_MASK)
+
+CHECK_TYPE_SIZE(size_t EVENT__SIZEOF_SIZE_T)
+if(NOT EVENT__SIZEOF_SIZE_T)
+  set(EVENT__size_t unsigned)
+  set(EVENT__SIZEOF_SIZE_T ${EVENT__SIZEOF_UNSIGNED})
+endif()
+
+CHECK_TYPE_SIZE(ssize_t EVENT__SIZEOF_SSIZE_T)
+CHECK_TYPE_SIZE(SSIZE_T EVENT__SIZEOF_UPPERCASE_SSIZE_T)
+if(NOT EVENT__SIZEOF_SSIZE_T)
+    if(EVENT__SIZEOF_UPPERCASE_SSIZE_T)
+        set(EVENT__ssize_t SSIZE_T)
+        set(EVENT__SIZEOF_SSIZE_T ${EVENT__SIZEOF_UPPERCASE_SSIZE_T})
+    else()
+        set(EVENT__ssize_t int)
+        set(EVENT__SIZEOF_SSIZE_T ${EVENT__SIZEOF_INT})
+    endif()
+endif()
+
+CHECK_TYPE_SIZE(socklen_t EVENT__SIZEOF_SOCKLEN_T)
+if(NOT EVENT__SIZEOF_SOCKLEN_T)
+  set(EVENT__socklen_t "unsigned int")
+  set(EVENT__SIZEOF_SOCKLEN_T ${EVENT__SIZEOF_UNSIGNED_INT})
+endif()
+
+CHECK_TYPE_SIZE(pid_t EVENT__SIZEOF_PID_T)
+if(NOT EVENT__SIZEOF_PID_T)
+  set(EVENT__pid_t int)
+  set(EVENT__SIZEOF_PID_T ${EVENT__SIZEOF_INT})
+endif()
+
+if(EVENT__HAVE_CLOCK_GETTIME)
+  set(EVENT__DNS_USE_CPU_CLOCK_FOR_ID 1)
+endif()
+
+CHECK_TYPE_SIZE("struct addrinfo" EVENT__HAVE_STRUCT_ADDRINFO)
+
+CHECK_TYPE_SIZE("struct in6_addr" EVENT__HAVE_STRUCT_IN6_ADDR)
+if(EVENT__HAVE_STRUCT_IN6_ADDR)
+CHECK_STRUCT_HAS_MEMBER("struct in6_addr" s6_addr16 ws2tcpip.h EVENT__HAVE_STRUCT_IN6_ADDR_S6_ADDR16)
+CHECK_STRUCT_HAS_MEMBER("struct in6_addr" s6_addr32 ws2tcpip.h EVENT__HAVE_STRUCT_IN6_ADDR_S6_ADDR32)
+endif()
+
+CHECK_TYPE_SIZE("sa_family_t"EVENT__HAVE_SA_FAMILY_T)
+CHECK_TYPE_SIZE("struct sockaddr_in6" EVENT__HAVE_STRUCT_SOCKADDR_IN6)
+if(EVENT__HAVE_STRUCT_SOCKADDR_IN6)
+CHECK_STRUCT_HAS_MEMBER("struct sockaddr_in6" sin6_len ws2tcpip.h EVENT__HAVE_STRUCT_SOCKADDR_IN6_SIN6_LEN)
+CHECK_STRUCT_HAS_MEMBER("struct sockaddr_in6" sin_len ws2tcpip.h EVENT__HAVE_STRUCT_SOCKADDR_IN_SIN_LEN)
+endif()
+
+CHECK_TYPE_SIZE("struct sockaddr_storage" EVENT__HAVE_STRUCT_SOCKADDR_STORAGE)
+if(EVENT__HAVE_STRUCT_SOCKADDR_STORAGE)
+CHECK_STRUCT_HAS_MEMBER("struct sockaddr_storage" ss_family ws2tcpip.h EVENT__HAVE_STRUCT_SOCKADDR_STORAGE_SS_FAMILY)
+CHECK_STRUCT_HAS_MEMBER("struct sockaddr_storage" __ss_family ws2tcpip.h EVENT__HAVE_STRUCT_SOCKADDR_STORAGE___SS_FAMILY)
+endif()
+
+set(HDR_PRIVATE
+    bufferevent-internal.h
+    changelist-internal.h
+    defer-internal.h
+    evbuffer-internal.h
+    include/evdns.h
     event-internal.h
-    event.h
-    evhttp.h
+    include/event.h
+    include/evhttp.h
+    evmap-internal.h
     evrpc-internal.h
-    evrpc.h
-    evsignal.h
-    evutil.h
+    include/evrpc.h
+    evsignal-internal.h
+    evthread-internal.h
+    include/evutil.h
+    ht-internal.h
     http-internal.h
-    min_heap.h
+    iocp-internal.h
+    ipv6-internal.h
+    log-internal.h
+    minheap-internal.h
+    mm-internal.h
+    ratelim-internal.h
     strlcpy-internal.h
-    ${EXTRA_FILES}
+    util-internal.h
+	evconfig-private.h
+    )
+    
+set(HDR_PUBLIC
+    include/event2/buffer.h
+    include/event2/bufferevent.h
+    include/event2/bufferevent_compat.h
+    include/event2/bufferevent_ssl.h
+    include/event2/bufferevent_struct.h
+    include/event2/buffer_compat.h
+    include/event2/dns.h
+    include/event2/dns_compat.h
+    include/event2/dns_struct.h
+    include/event2/event.h
+    include/event2/event_compat.h
+    include/event2/event_struct.h
+    include/event2/http.h
+    include/event2/http_compat.h
+    include/event2/http_struct.h
+    include/event2/listener.h
+    include/event2/rpc.h
+    include/event2/rpc_compat.h
+    include/event2/rpc_struct.h
+    include/event2/tag.h
+    include/event2/tag_compat.h
+    include/event2/thread.h
+    include/event2/util.h
     )
 
-foreach(HDR event.h evdns.h evrpc.h evutil.h evsignal.h)
-    CONFIGURE_FILE(${HDR} ${PROJECT_BINARY_DIR}/include/libevent/${HDR} COPYONLY)
-endforeach()
+set(SRC_CORE
+    buffer.c 
+    bufferevent.c 
+    bufferevent_filter.c 
+    bufferevent_pair.c 
+    bufferevent_ratelim.c 
+    bufferevent_sock.c 
+    event.c 
+    evmap.c 
+    evthread.c 
+    evutil.c 
+    evutil_rand.c
+    listener.c 
+    log.c 
+    signal.c 
+    strlcpy.c
+    )
 
-add_subdirectory(test)
-add_subdirectory(sample)
+if(EVENT__HAVE_SELECT)
+    list(APPEND SRC_CORE select.c)
+endif()
+
+if(EVENT__HAVE_POLL)
+    list(APPEND SRC_CORE poll.c)
+endif()
+
+if(EVENT__HAVE_KQUEUE)
+    list(APPEND SRC_CORE kqueue.c)
+endif()
+
+if(EVENT__HAVE_DEVPOLL)
+    list(APPEND SRC_CORE devpoll.c)
+endif()
+
+if(EVENT__HAVE_EPOLL)
+    list(APPEND SRC_CORE epoll_sub.c epoll.c)
+endif()
+
+if(EVENT__HAVE_EPORT)
+    list(APPEND SRC_CORE evport.c)
+endif()
+
+if(CMAKE_USE_PTHREADS_INIT)
+    set(EVENT__HAVE_PTHREAD 1)
+    list(APPEND SRC_CORE evthread_pthread.c)
+    list(APPEND SRC_REGRESS test/regress_pthread.c)
+endif()
+
+if(ZLIB_LIBRARY)
+    set(EVENT__HAVE_ZLIB 1)
+	include_directories(${ZLIB_INCLUDE_DIRS})
+    list(APPEND SRC_REGRESS test/regress_zlib.c)
+    list(APPEND LIB_REGRESS ${ZLIB_LIBRARIES})
+endif()
+
+set(SRC_EXTRA
+    event_tagging.c 
+    http.c 
+    evdns.c 
+    evrpc.c
+    )
+
+add_definitions(-DHAVE_CONFIG_H)
+include_directories(./ ./compat ./include)
+
+if(WIN32)
+    list(APPEND SRC_CORE 
+        buffer_iocp.c 
+        bufferevent_async.c
+        event_iocp.c 
+        evthread_win32.c 
+        win32select.c
+        )
+    list(APPEND SRC_REGRESS test/regress_iocp.c)
+    set(EVENT__DNS_USE_FTIME_FOR_ID 1)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE)
+    set(LIB_PLATFORM ws2_32)
+	include_directories(./WIN32-Code)
+endif()
+
+source_group("Headers Private"  FILES ${HDR_PRIVATE})
+source_group("Headers Public"   FILES ${HDR_PUBLIC})
+source_group("Source Core"      FILES ${SRC_CORE})
+source_group("Source Extra"     FILES ${SRC_EXTRA})
+
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/event-config.h.cmake 
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/event2/event-config.h)
+
+add_library(event2_core STATIC
+    ${HDR_PRIVATE}
+    ${HDR_PUBLIC}
+    ${SRC_CORE}
+    )
+    
+add_library(event2_extras STATIC
+    ${SRC_EXTRA}
+    )
+    
+add_library(event2 STATIC
+    ${HDR_PRIVATE}
+    ${HDR_PUBLIC}
+    ${SRC_CORE}
+    ${SRC_EXTRA}
+    )
+
+# TODO: Make these into tests instead?
+#add_executable(event-test sample/event-test.c)
+#target_link_libraries(event-test event2 ${LIB_PLATFORM})
+
+add_executable(time-test sample/time-test.c)
+target_link_libraries(time-test event2 ${LIB_PLATFORM})
+
+add_executable(signal-test sample/signal-test.c)
+target_link_libraries(signal-test event2 ${LIB_PLATFORM})
+
+#add_executable(test-init test/test-init.c)
+#target_link_libraries(test-init event2 ${LIB_PLATFORM})
+
+#add_executable(test-eof test/test-eof.c)
+#target_link_libraries(test-eof event2 ${LIB_PLATFORM})
+
+#add_executable(test-weof test/test-weof.c)
+#target_link_libraries(test-weof event2 ${LIB_PLATFORM})
+
+#add_executable(time-test test/time-test.c)
+#target_link_libraries(time-test event2 ${LIB_PLATFORM})
+
+# TODO: Only add this if Python is available
+add_custom_command(
+    OUTPUT 
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/regress.gen.c 
+        ${CMAKE_CURRENT_SOURCE_DIR}/test/regress.gen.h
+    DEPENDS 
+        event_rpcgen.py
+        test/regress.rpc 
+    COMMAND ${PYTHON_EXECUTABLE} ../event_rpcgen.py regress.rpc 
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test
+    )
+
+list(APPEND SRC_REGRESS 
+    test/regress.c 
+    test/regress_buffer.c 
+    test/regress_http.c 
+    test/regress_dns.c 
+    test/regress_testutils.c 
+    test/regress_testutils.h 
+    test/regress_rpc.c 
+    test/regress_et.c 
+    test/regress_bufferevent.c 
+    test/regress_listener.c 
+    test/regress_util.c 
+    test/tinytest.c 
+    test/regress_main.c 
+    test/regress_minheap.c
+    test/regress.gen.c
+    test/regress.gen.h
+    )
+
+add_executable(regress ${SRC_REGRESS})
+target_link_libraries(regress event2 ${LIB_REGRESS} ${CMAKE_THREAD_LIBS_INIT} ${LIB_PLATFORM})
+
+add_executable(bench_cascade test/bench_cascade.c)
+target_link_libraries(bench_cascade event2 ${LIB_PLATFORM})
+
+add_executable(bench_http test/bench_http.c)
+target_link_libraries(bench_http event2 ${LIB_PLATFORM})
