@@ -38,6 +38,7 @@
 #else
 #include <sys/socket.h>
 #include <sys/resource.h>
+#define closesocket(x) close(x)
 #endif
 #include <signal.h>
 #include <fcntl.h>
@@ -51,6 +52,7 @@
 
 #include <event.h>
 #include <evutil.h>
+#include <getopt.h>
 
 /*
  * This benchmark tests how quickly we can propagate a write down a chain
@@ -121,8 +123,8 @@ run_once(int num_pipes)
 
 	for (cp = pipes, i = 0; i < num_pipes; i++, cp += 2) {
 		event_del(&events[i]);
-		close(cp[0]);
-		close(cp[1]);
+		closesocket(cp[0]);
+		closesocket(cp[1]);
 	}
 
 	free(pipes);

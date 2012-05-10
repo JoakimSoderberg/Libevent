@@ -237,7 +237,7 @@ CHECK_STRUCT_HAS_MEMBER("struct in6_addr" s6_addr16 ws2tcpip.h EVENT__HAVE_STRUC
 CHECK_STRUCT_HAS_MEMBER("struct in6_addr" s6_addr32 ws2tcpip.h EVENT__HAVE_STRUCT_IN6_ADDR_S6_ADDR32)
 endif()
 
-CHECK_TYPE_SIZE("sa_family_t"EVENT__HAVE_SA_FAMILY_T)
+CHECK_TYPE_SIZE("sa_family_t" EVENT__HAVE_SA_FAMILY_T)
 CHECK_TYPE_SIZE("struct sockaddr_in6" EVENT__HAVE_STRUCT_SOCKADDR_IN6)
 if(EVENT__HAVE_STRUCT_SOCKADDR_IN6)
 CHECK_STRUCT_HAS_MEMBER("struct sockaddr_in6" sin6_len ws2tcpip.h EVENT__HAVE_STRUCT_SOCKADDR_IN6_SIN6_LEN)
@@ -316,6 +316,7 @@ set(SRC_CORE
     evthread.c 
     evutil.c 
     evutil_rand.c
+	evutil_time.c
     listener.c 
     log.c 
     signal.c 
@@ -376,8 +377,11 @@ if(WIN32)
         event_iocp.c 
         evthread_win32.c 
         win32select.c
+		WIN32-Code/getopt.c
+		WIN32-Code/getopt_long.c
         )
     list(APPEND SRC_REGRESS test/regress_iocp.c)
+	list(APPEND SRC_REGRESS test/regress_thread.c)
     set(EVENT__DNS_USE_FTIME_FOR_ID 1)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE)
     set(LIB_PLATFORM ws2_32)

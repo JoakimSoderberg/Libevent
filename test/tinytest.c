@@ -32,7 +32,11 @@
 #include <assert.h>
 
 #ifdef _WIN32
+/*
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
+*/
 #else
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -52,6 +56,7 @@
 #define __attribute__(x)
 #endif
 
+#include <event2/util.h>
 #include "tinytest.h"
 #include "tinytest_macros.h"
 
@@ -68,7 +73,7 @@ static int opt_verbosity = 1; /**< -==quiet,0==terse,1==normal,2==verbose */
 const char *verbosity_flag = "";
 
 enum outcome { SKIP=2, OK=1, FAIL=0 };
-static enum outcome cur_test_outcome = 0;
+static enum outcome cur_test_outcome = FAIL;
 const char *cur_test_prefix = NULL; /**< prefix of the current test group */
 /** Name of the current test, if we haven't logged is yet. Used for --quiet */
 const char *cur_test_name = NULL;
@@ -85,7 +90,7 @@ static enum outcome
 testcase_run_bare_(const struct testcase_t *testcase)
 {
 	void *env = NULL;
-	int outcome;
+	enum outcome test_outcome;
 	if (testcase->setup) {
 		env = testcase->setup->setup_fn(testcase);
 		if (!env)
@@ -96,14 +101,14 @@ testcase_run_bare_(const struct testcase_t *testcase)
 
 	cur_test_outcome = OK;
 	testcase->fn(env);
-	outcome = cur_test_outcome;
+	test_outcome = cur_test_outcome;
 
 	if (testcase->setup) {
 		if (testcase->setup->cleanup_fn(testcase, env) == 0)
-			outcome = FAIL;
+			test_outcome = FAIL;
 	}
 
-	return outcome;
+	return test_outcome;
 }
 
 #define MAGIC_EXITCODE 42
@@ -135,7 +140,7 @@ testcase_run_forked_(const struct testgroup_t *group,
 	if (opt_verbosity>0)
 		printf("[forking] ");
 
-	snprintf(buffer, sizeof(buffer), "%s --RUNNING-FORKED %s %s%s",
+	evutil_snprintf(buffer, sizeof(buffer), "%s --RUNNING-FORKED %s %s%s",
 		 commandname, verbosity_flag, group->prefix, testcase->name);
 
 	memset(&si, 0, sizeof(si));
@@ -146,7 +151,7 @@ testcase_run_forked_(const struct testgroup_t *group,
 			   0, NULL, NULL, &si, &info);
 	if (!ok) {
 		printf("CreateProcess failed!\n");
-		return 0;
+		return FAIL;
 	}
 	WaitForSingleObject(info.hProcess, INFINITE);
 	GetExitCodeProcess(info.hProcess, &exitcode);
@@ -197,7 +202,7 @@ testcase_run_forked_(const struct testgroup_t *group,
 		r = (int)read(outcome_pipe[0], b, 1);
 		if (r == 0) {
 			printf("[Lost connection!] ");
-			return 0;
+			return FAIL;
 		} else if (r != 1) {
 			perror("read outcome from pipe");
 		}
@@ -269,7 +274,7 @@ tinytest_set_flag_(struct testgroup_t *groups, const char *arg, unsigned long fl
 		length = strstr(arg,"..")-arg;
 	for (i=0; groups[i].prefix; ++i) {
 		for (j=0; groups[i].cases[j].name; ++j) {
-			snprintf(fullname, sizeof(fullname), "%s%s",
+			evutil_snprintf(fullname, sizeof(fullname), "%s%s",
 				 groups[i].prefix, groups[i].cases[j].name);
 			if (!flag) /* Hack! */
 				printf("    %s\n", fullname);
@@ -306,7 +311,7 @@ tinytest_main(int c, const char **v, struct testgroup_t *groups)
 	const char *extension = "";
 	if (!sp || stricmp(sp, ".exe"))
 		extension = ".exe"; /* Add an exe so CreateProcess will work */
-	snprintf(commandname, sizeof(commandname), "%s%s", v[0], extension);
+	evutil_snprintf(commandname, sizeof(commandname), "%s%s", v[0], extension);
 	commandname[MAX_PATH]='\0';
 #endif
 	for (i=1; i<c; ++i) {
