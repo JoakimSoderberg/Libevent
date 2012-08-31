@@ -286,10 +286,19 @@ test_ratelimiting(void)
 #endif
 
 	base = event_base_new_with_config(base_cfg);
+	event_config_free(base_cfg);
+	if (! base) {
+		fprintf(stderr, "Couldn't create event_base");
+		return 1;
+	}
 
 	listener = evconnlistener_new_bind(base, echo_listenercb, base,
 	    LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE, -1,
 	    (struct sockaddr *)&sin, sizeof(sin));
+	if (! listener) {
+		fprintf(stderr, "Couldn't create listener");
+		return 1;
+	}
 
 	slen = sizeof(ss);
 	if (getsockname(evconnlistener_get_fd(listener), (struct sockaddr *)&ss,
@@ -585,7 +594,7 @@ main(int argc, char **argv)
 	}
 
 #ifndef EVENT__DISABLE_THREAD_SUPPORT
-	evthread_enable_lock_debuging();
+	evthread_enable_lock_debugging();
 #endif
 
 	return test_ratelimiting();

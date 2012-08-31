@@ -887,11 +887,6 @@ test_evutil_getaddrinfo(void *arg)
 {
 	struct evutil_addrinfo *ai = NULL, *a;
 	struct evutil_addrinfo hints;
-
-	struct sockaddr_in6 *sin6;
-	struct sockaddr_in *sin;
-	char buf[128];
-	const char *cp;
 	int r;
 
 	/* Try using it as a pton. */
@@ -1018,6 +1013,23 @@ test_evutil_getaddrinfo(void *arg)
 		ai = NULL;
 	}
 
+end:
+	if (ai)
+		evutil_freeaddrinfo(ai);
+}
+
+static void
+test_evutil_getaddrinfo_live(void *arg)
+{
+	struct evutil_addrinfo *ai = NULL;
+	struct evutil_addrinfo hints;
+
+	struct sockaddr_in6 *sin6;
+	struct sockaddr_in *sin;
+	char buf[128];
+	const char *cp;
+	int r;
+
 	/* Now do some actual lookups. */
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = PF_INET;
@@ -1138,6 +1150,7 @@ test_event_calloc(void *arg)
 	tt_assert(p != NULL);
 	tt_int_op(errno, ==, 0);
 	mm_free(p);
+	p = NULL;
 
 	/* mm_calloc() should set errno = ENOMEM and return NULL
 	 * in case of potential overflow. */
@@ -1148,6 +1161,9 @@ test_event_calloc(void *arg)
 
  end:
 	errno = 0;
+	if (p)
+		mm_free(p);
+
 	return;
 }
 
@@ -1219,7 +1235,7 @@ end:
 }
 
 static void
-test_evutil_monotonic(void *data_)
+test_evutil_monotonic_res(void *data_)
 {
 	/* Basic santity-test for monotonic timers.  What we'd really like
 	 * to do is make sure that they can't go backwards even when the
@@ -1233,7 +1249,7 @@ test_evutil_monotonic(void *data_)
 	struct timeval tv[10], delay;
 	int total_diff = 0;
 
-	int flags = 0, wantres, acceptdiff, i, maxstep = 25*1000;
+	int flags = 0, wantres, acceptdiff, i;
 	if (precise)
 		flags |= EV_MONOT_PRECISE;
 	if (fallback)
@@ -1243,15 +1259,13 @@ test_evutil_monotonic(void *data_)
 		wantres = 10*1000;
 		acceptdiff = 1000;
 #else
-		wantres = 300;
-		acceptdiff = 100;
+		wantres = 1000;
+		acceptdiff = 300;
 #endif
 	} else {
 		wantres = 40*1000;
 		acceptdiff = 20*1000;
 	}
-	if (precise)
-		maxstep = 500;
 
 	TT_BLATHER(("Precise = %d", precise));
 	TT_BLATHER(("Fallback = %d", fallback));
@@ -1278,7 +1292,29 @@ test_evutil_monotonic(void *data_)
 	}
 	tt_int_op(abs(total_diff/9 - wantres), <, acceptdiff);
 
-	/* Second, find out what precision we actually see. */
+end:
+	;
+}
+
+static void
+test_evutil_monotonic_prc(void *data_)
+{
+	struct basic_test_data *data = data_;
+	struct evutil_monotonic_timer timer;
+	const int precise = strstr(data->setup_data, "precise") != NULL;
+	const int fallback = strstr(data->setup_data, "fallback") != NULL;
+	struct timeval tv[10];
+	int total_diff = 0;
+	int i, maxstep = 25*1000,flags=0;
+	if (precise)
+		maxstep = 500;
+	if (precise)
+		flags |= EV_MONOT_PRECISE;
+	if (fallback)
+		flags |= EV_MONOT_FALLBACK;
+	tt_int_op(evutil_configure_monotonic_time_(&timer, flags), ==, 0);
+
+	/* find out what precision we actually see. */
 
 	evutil_gettime_monotonic_(&timer, &tv[0]);
 	for (i = 1; i < 10; ++i) {
@@ -1318,6 +1354,7 @@ struct testcase_t util_testcases[] = {
 	{ "integers", test_evutil_integers, 0, NULL, NULL },
 	{ "rand", test_evutil_rand, TT_FORK, NULL, NULL },
 	{ "getaddrinfo", test_evutil_getaddrinfo, TT_FORK, NULL, NULL },
+	{ "getaddrinfo_live", test_evutil_getaddrinfo_live, TT_FORK|TT_OFF_BY_DEFAULT, NULL, NULL },
 #ifdef _WIN32
 	{ "loadsyslib", test_evutil_loadsyslib, TT_FORK, NULL, NULL },
 #endif
@@ -1325,9 +1362,12 @@ struct testcase_t util_testcases[] = {
 	{ "mm_calloc", test_event_calloc, 0, NULL, NULL },
 	{ "mm_strdup", test_event_strdup, 0, NULL, NULL },
 	{ "usleep", test_evutil_usleep, 0, NULL, NULL },
-	{ "monotonic", test_evutil_monotonic, 0, &basic_setup, (void*)"" },
-	{ "monotonic_precise", test_evutil_monotonic, 0, &basic_setup, (void*)"precise" },
-	{ "monotonic_fallback", test_evutil_monotonic, 0, &basic_setup, (void*)"fallback" },
+	{ "monotonic_res", test_evutil_monotonic_res, 0, &basic_setup, (void*)"" },
+	{ "monotonic_res_precise", test_evutil_monotonic_res, TT_OFF_BY_DEFAULT, &basic_setup, (void*)"precise" },
+	{ "monotonic_res_fallback", test_evutil_monotonic_res, TT_OFF_BY_DEFAULT, &basic_setup, (void*)"fallback" },
+	{ "monotonic_prc", test_evutil_monotonic_prc, 0, &basic_setup, (void*)"" },
+	{ "monotonic_prc_precise", test_evutil_monotonic_prc, 0, &basic_setup, (void*)"precise" },
+	{ "monotonic_prc_fallback", test_evutil_monotonic_prc, 0, &basic_setup, (void*)"fallback" },
 	END_OF_TESTCASES,
 };
 

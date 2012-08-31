@@ -1052,7 +1052,6 @@ test_bufferevent_connect_hostname(void *arg)
 	int expect_err5;
 	struct evdns_base *dns=NULL;
 	struct evdns_server_port *port=NULL;
-	evutil_socket_t server_fd=-1;
 	struct sockaddr_in sin;
 	int listener_port=-1;
 	ev_uint16_t dns_port=0;
@@ -1070,6 +1069,7 @@ test_bufferevent_connect_hostname(void *arg)
 	    &n_accept,
 	    LEV_OPT_REUSEABLE|LEV_OPT_CLOSE_ON_EXEC,
 	    -1, (struct sockaddr *)&sin, sizeof(sin));
+	tt_assert(listener);
 	listener_port = regress_get_socket_port(
 		evconnlistener_get_fd(listener));
 
@@ -1153,8 +1153,6 @@ test_bufferevent_connect_hostname(void *arg)
 end:
 	if (listener)
 		evconnlistener_free(listener);
-	if (server_fd>=0)
-		evutil_closesocket(server_fd);
 	if (port)
 		evdns_close_server_port(port);
 	if (dns)
@@ -1215,14 +1213,16 @@ test_getaddrinfo_async(void *arg)
 	int n_dns_questions = 0;
 
 	struct evdns_base *dns_base = evdns_base_new(data->base, 0);
+	tt_assert(dns_base);
 
 	/* for localhost */
 	evdns_base_load_hosts(dns_base, NULL);
 
+	memset(a_out, 0, sizeof(a_out));
+	memset(&local_outcome, 0, sizeof(local_outcome));
+
 	tt_assert(! evdns_base_set_option(dns_base, "timeout", "0.3"));
 	tt_assert(! evdns_base_set_option(dns_base, "getaddrinfo-allow-skew", "0.2"));
-
-	memset(a_out, 0, sizeof(a_out));
 
 	n_gai_results_pending = 10000; /* don't think about exiting yet. */
 
@@ -1711,6 +1711,7 @@ testleak_cleanup(const struct testcase_t *testcase, void *env_)
 {
 	int ok = 0;
 	struct testleak_env_t *env = env_;
+	tt_assert(env);
 #ifdef EVENT__DISABLE_DEBUG_MODE
 	tt_int_op(allocated_chunks, ==, 0);
 #else
@@ -1719,12 +1720,13 @@ testleak_cleanup(const struct testcase_t *testcase, void *env_)
 #endif
 	ok = 1;
 end:
-	if (env->dns_base)
-		evdns_base_free(env->dns_base, 0);
-	if (env->base)
-		event_base_free(env->base);
-	if (env)
+	if (env) {
+		if (env->dns_base)
+			evdns_base_free(env->dns_base, 0);
+		if (env->base)
+			event_base_free(env->base);
 		free(env);
+	}
 	return ok;
 }
 
@@ -1832,10 +1834,10 @@ end:
 
 struct testcase_t dns_testcases[] = {
 	DNS_LEGACY(server, TT_FORK|TT_NEED_BASE),
-	DNS_LEGACY(gethostbyname, TT_FORK|TT_NEED_BASE|TT_NEED_DNS),
-	DNS_LEGACY(gethostbyname6, TT_FORK|TT_NEED_BASE|TT_NEED_DNS),
-	DNS_LEGACY(gethostbyaddr, TT_FORK|TT_NEED_BASE|TT_NEED_DNS),
-	{ "resolve_reverse", dns_resolve_reverse, TT_FORK, NULL, NULL },
+	DNS_LEGACY(gethostbyname, TT_FORK|TT_NEED_BASE|TT_NEED_DNS|TT_OFF_BY_DEFAULT),
+	DNS_LEGACY(gethostbyname6, TT_FORK|TT_NEED_BASE|TT_NEED_DNS|TT_OFF_BY_DEFAULT),
+	DNS_LEGACY(gethostbyaddr, TT_FORK|TT_NEED_BASE|TT_NEED_DNS|TT_OFF_BY_DEFAULT),
+	{ "resolve_reverse", dns_resolve_reverse, TT_FORK|TT_OFF_BY_DEFAULT, NULL, NULL },
 	{ "search", dns_search_test, TT_FORK|TT_NEED_BASE, &basic_setup, NULL },
 	{ "search_cancel", dns_search_cancel_test,
 	  TT_FORK|TT_NEED_BASE, &basic_setup, NULL },

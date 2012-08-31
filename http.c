@@ -1017,7 +1017,7 @@ evhttp_read_body(struct evhttp_connection *evcon, struct evhttp_request *req)
 }
 
 #define get_deferred_queue(evcon)		\
-	(event_base_get_deferred_cb_queue_((evcon)->base))
+	((evcon)->base)
 
 /*
  * Gets called when more data becomes available
@@ -1079,7 +1079,7 @@ evhttp_read_cb(struct bufferevent *bufev, void *arg)
 }
 
 static void
-evhttp_deferred_read_cb(struct deferred_cb *cb, void *data)
+evhttp_deferred_read_cb(struct event_callback *cb, void *data)
 {
 	struct evhttp_connection *evcon = data;
 	evhttp_read_cb(evcon->bufev, evcon);
@@ -2197,7 +2197,9 @@ evhttp_connection_base_bufferevent_new(struct event_base *base, struct evdns_bas
 			bufferevent_base_set(base, evcon->bufev);
 	}
 
-	event_deferred_cb_init_(&evcon->read_more_deferred_cb,
+	event_deferred_cb_init_(
+	    &evcon->read_more_deferred_cb,
+	    bufferevent_get_priority(bev),
 	    evhttp_deferred_read_cb, evcon);
 
 	evcon->dns_base = dnsbase;
@@ -2815,9 +2817,8 @@ evhttp_uriencode(const char *uri, ev_ssize_t len, int space_as_plus)
 	}
 	evbuffer_add(buf, "", 1); /* NUL-terminator. */
 	result = mm_malloc(evbuffer_get_length(buf));
-	if (!result)
-		return NULL;
-	evbuffer_remove(buf, result, evbuffer_get_length(buf));
+	if (result)
+		evbuffer_remove(buf, result, evbuffer_get_length(buf));
 	evbuffer_free(buf);
 
 	return (result);
@@ -3991,9 +3992,12 @@ bind_socket_ai(struct evutil_addrinfo *ai, int reuse)
 			return (-1);
 	}
 
-	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&on, sizeof(on));
-	if (reuse)
-		evutil_make_listen_socket_reuseable(fd);
+	if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&on, sizeof(on))<0)
+		goto out;
+	if (reuse) {
+		if (evutil_make_listen_socket_reuseable(fd) < 0)
+			goto out;
+	}
 
 	if (ai != NULL) {
 		r = bind(fd, ai->ai_addr, (ev_socklen_t)ai->ai_addrlen);
