@@ -350,7 +350,7 @@ endif()
 if(CMAKE_USE_PTHREADS_INIT)
     set(EVENT__HAVE_PTHREAD 1)
     list(APPEND SRC_CORE evthread_pthread.c)
-    list(APPEND SRC_REGRESS test/regress_pthread.c)
+    list(APPEND SRC_REGRESS test/regress_thread.c)
 endif()
 
 if(ZLIB_LIBRARY)
