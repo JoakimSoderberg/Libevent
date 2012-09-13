@@ -184,6 +184,9 @@
 /* Define to 1 if you have the `nanosleep' function. */
 #cmakedefine EVENT__HAVE_NANOSLEEP 1
 
+/* Define to 1 if you have the `usleep' function. */
+#cmakedefine EVENT__HAVE_USLEEP 1
+
 /* Define to 1 if you have the <netdb.h> header file. */
 #cmakedefine EVENT__HAVE_NETDB_H 1
 
@@ -412,6 +415,9 @@
 
 /* The size of `socklen_t', as computed by sizeof. */
 #cmakedefine EVENT__SIZEOF_SOCKLEN_T ${EVENT__SIZEOF_SOCKLEN_T}
+
+/* The size of 'void *', as computer by sizeof */
+#cmakedefine EVENT__SIZEOF_VOID_P ${EVENT__SIZEOF_VOID_P}
 
 /* Define to appropriate substitute if compiler doesnt have __func__ */
 #cmakedefine EVENT____func__ ${EVENT____func__}

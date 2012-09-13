@@ -1,4 +1,9 @@
 #ifdef CHECK_FUNCTION_EXISTS
+
+#ifndef WIN32
+char CHECK_FUNCTION_EXISTS();
+#endif
+
 #ifdef __CLASSIC_C__
 int main(){
   int ac;
@@ -6,7 +11,11 @@ int main(){
 #else
 int main(int ac, char*av[]){
 #endif
+#ifdef WIN32
   void * p = &CHECK_FUNCTION_EXISTS;
+#else
+  CHECK_FUNCTION_EXISTS();
+#endif
   if(ac > 1000)
     {
     return *av[0];
