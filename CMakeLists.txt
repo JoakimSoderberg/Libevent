@@ -182,6 +182,11 @@ CHECK_TYPE_SIZE("long long" EVENT__SIZEOF_LONG_LONG BUILTIN_TYPES_ONLY)
 if(WIN32)
     set(EVENT____func__ __FUNCTION__)
     set(EVENT__inline   __inline)
+	
+	# These aren't available until Windows Vista.
+	# But you can still link them. They just won't be found when running the exe.
+	set(EVENT__HAVE_INET_NTOP 0)
+	set(EVENT__HAVE_INET_PTON 0)
 else()
     set(EVENT____func__ __func__)
     set(EVENT__inline   __inline__)
@@ -437,6 +442,7 @@ target_link_libraries(signal-test event2 ${LIB_PLATFORM})
 #target_link_libraries(time-test event2 ${LIB_PLATFORM})
 
 # TODO: Only add this if Python is available
+add_definitions(-DTINYTEST_LOCAL)
 add_custom_command(
     OUTPUT 
         ${CMAKE_CURRENT_SOURCE_DIR}/test/regress.gen.c 
