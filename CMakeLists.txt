@@ -306,7 +306,8 @@ set(HDR_PRIVATE
     ratelim-internal.h
     strlcpy-internal.h
     util-internal.h
-	evconfig-private.h
+    evconfig-private.h
+    compat/sys/queue.h
     )
     
 set(HDR_PUBLIC
