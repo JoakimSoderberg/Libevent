@@ -119,16 +119,16 @@
 
 /* TODO: Check for different gethostname argument counts. CheckPrototypeDefinition.cmake can be used. */
 /* Define this if you have any gethostbyname_r() */
-/* #cmakedefine EVENT__HAVE_GETHOSTBYNAME_R 1 */
+#cmakedefine EVENT__HAVE_GETHOSTBYNAME_R 1
 
 /* Define this if gethostbyname_r takes 3 arguments */
-/* #cmakedefine EVENT__HAVE_GETHOSTBYNAME_R_3_ARG 1*/
+#cmakedefine EVENT__HAVE_GETHOSTBYNAME_R_3_ARG 1
 
 /* Define this if gethostbyname_r takes 5 arguments */
-/* #cmakedefine EVENT__HAVE_GETHOSTBYNAME_R_5_ARG 1*/
+#cmakedefine EVENT__HAVE_GETHOSTBYNAME_R_5_ARG 1
 
 /* Define this if gethostbyname_r takes 6 arguments */
-/* #cmakedefine EVENT__HAVE_GETHOSTBYNAME_R_6_ARG 1*/
+#cmakedefine EVENT__HAVE_GETHOSTBYNAME_R_6_ARG 1
 
 /* Define to 1 if you have the `getifaddrs' function. */
 #cmakedefine EVENT__HAVE_GETIFADDRS 1
@@ -202,8 +202,14 @@
 /* Define if the system has openssl */
 #cmakedefine EVENT__HAVE_OPENSSL 1
 
+/* Defines if the system has zlib */
+#cmakedefine EVENT__HAVE_ZLIB 1
+
 /* Define to 1 if you have the `pipe' function. */
 #cmakedefine EVENT__HAVE_PIPE 1
+
+/* Define to 1 if you have the `pipe2' function. */
+#cmakedefine EVENT__HAVE_PIPE2 1
 
 /* Define to 1 if you have the `poll' function. */
 #cmakedefine EVENT__HAVE_POLL 1
@@ -223,11 +229,23 @@
 /* Define if we have pthreads on this system */
 #cmakedefine EVENT__HAVE_PTHREADS 1
 
+/* Define to 1 if you have the `putenv' function. */
+#cmakedefine EVENT__HAVE_PUTENV 1
+
 /* Define to 1 if the system has the type `sa_family_t'. */
 #cmakedefine EVENT__HAVE_SA_FAMILY_T 1
 
 /* Define to 1 if you have the `select' function. */
 #cmakedefine EVENT__HAVE_SELECT 1
+
+/* Define to 1 if you have the `setenv' function. */
+#cmakedefine EVENT__HAVE_SETENV 1
+
+/* Define if F_SETFD is defined in <fcntl.h> */
+#cmakedefine EVENT__HAVE_SETFD 1
+
+/* Define to 1 if you have the `setrlimit' function. */
+#cmakedefine EVENT__HAVE_SETRLIMIT 1
 
 /* Define to 1 if you have the `sendfile' function. */
 #cmakedefine EVENT__HAVE_SENDFILE 1
@@ -331,6 +349,9 @@
 /* Define to 1 if you have the <sys/queue.h> header file. */
 #cmakedefine EVENT__HAVE_SYS_QUEUE_H 1
 
+/* Define to 1 if you have the <sys/resource.h> header file. */
+#cmakedefine EVENT__HAVE_SYS_RESOURCE_H 1
+
 /* Define to 1 if you have the <sys/select.h> header file. */
 #cmakedefine EVENT__HAVE_SYS_SELECT_H 1
 
@@ -343,6 +364,12 @@
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #cmakedefine EVENT__HAVE_SYS_STAT_H 1
 
+/* Define to 1 if you have the <sys/sysctl.h> header file. */
+#cmakedefine EVENT__HAVE_SYS_SYSCTL_H 1
+
+/* Define to 1 if you have the <sys/timerfd.h> header file. */
+#cmakedefine EVENT__HAVE_SYS_TIMERFD_H */
+
 /* Define to 1 if you have the <sys/time.h> header file. */
 #cmakedefine EVENT__HAVE_SYS_TIME_H 1
 
@@ -351,6 +378,9 @@
 
 /* Define to 1 if you have the <sys/uio.h> header file. */
 #cmakedefine EVENT__HAVE_SYS_UIO_H 1
+
+/* Define to 1 if you have the <sys/wait.h> header file. */
+#cmakedefine EVENT__HAVE_SYS_WAIT_H 1
 
 /* Define if TAILQ_FOREACH is defined in <sys/queue.h> */
 #cmakedefine EVENT__HAVE_TAILQFOREACH 1
@@ -364,8 +394,14 @@
 /* Define if timercmp is defined in <sys/time.h> */
 #cmakedefine EVENT__HAVE_TIMERCMP 1
 
+/* Define to 1 if you have the `timerfd_create' function. */
+#cmakedefine EVENT__HAVE_TIMERFD_CREATE 1
+
 /* Define if timerisset is defined in <sys/time.h> */
 #cmakedefine EVENT__HAVE_TIMERISSET 1
+
+/* Define to 1 if the system has the type `uint8_t'. */
+#cmakedefine EVENT__HAVE_UINT8_T 1
 
 /* Define to 1 if the system has the type `uint16_t'. */
 #cmakedefine EVENT__HAVE_UINT16_T 1
@@ -376,11 +412,17 @@
 /* Define to 1 if the system has the type `uint64_t'. */
 #cmakedefine EVENT__HAVE_UINT64_T 1
 
-/* Define to 1 if the system has the type `uint8_t'. */
-#cmakedefine EVENT__HAVE_UINT8_T 1
+/* Define to 1 if the system has the type `uintptr_t'. */
+#cmakedefine EVENT__HAVE_UINTPTR_T 1
+
+/* Define to 1 if you have the `umask' function. */
+#cmakedefine EVENT__HAVE_UMASK 1
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #cmakedefine EVENT__HAVE_UNISTD_H 1
+
+/* Define to 1 if you have the `unsetenv' function. */
+#cmakedefine EVENT__HAVE_UNSETENV 1
 
 /* Define to 1 if you have the `vasprintf' function. */
 #cmakedefine EVENT__HAVE_VASPRINTF 1
@@ -392,6 +434,9 @@
    your system. */
 #cmakedefine EVENT__PTHREAD_CREATE_JOINABLE ${EVENT__PTHREAD_CREATE_JOINABLE}
 
+/* The size of `pthread_t', as computed by sizeof. */
+#cmakedefine EVENT__SIZEOF_PTHREAD_T ${EVENT__SIZEOF_PTHREAD_T}
+
 /* The size of a `int', as computed by sizeof. */
 #cmakedefine EVENT__SIZEOF_INT ${EVENT__SIZEOF_INT}
 
@@ -400,6 +445,9 @@
 
 /* The size of a `long long', as computed by sizeof. */
 #cmakedefine EVENT__SIZEOF_LONG_LONG ${EVENT__SIZEOF_LONG_LONG}
+
+/* The size of `off_t', as computed by sizeof. */
+#cmakedefine EVENT__SIZEOF_OFF_T ${EVENT__SIZEOF_OFF_T}
 
 /* The size of a `short', as computed by sizeof. */
 #cmakedefine EVENT__SIZEOF_SHORT ${EVENT__SIZEOF_SHORT}
@@ -421,6 +469,12 @@
 
 /* Define to appropriate substitute if compiler doesnt have __func__ */
 #cmakedefine EVENT____func__ ${EVENT____func__}
+
+/* Number of bits in a file offset, on hosts where this is settable. */
+#cmakedefine EVENT___FILE_OFFSET_BITS ${EVENT___FILE_OFFSET_BITS}
+
+/* Define for large files, on AIX-style hosts. */
+/* #undef _LARGE_FILES */
 
 /* Define to empty if `const' does not conform to ANSI C. */
 /* #undef EVENT__const */

@@ -59,14 +59,18 @@ SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 SET(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 SET(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 
-include("cmake/CheckFunctionExistsEx.cmake")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake/")
+include(CheckFunctionExistsEx)
+include(CheckFileOffsetBits)
 include(CheckFunctionExists)
 include(CheckIncludeFile)
+include(CheckIncludeFiles)
 include(CheckTypeSize)
 include(CheckVariableExists)
 include(CheckSymbolExists)
 include(CheckStructHasMember)
 include(CheckCSourceCompiles)
+include(CheckPrototypeDefinition)
 
 include(FindZLIB)    # -> HAVE_LIBZ
 include(FindThreads) # -> HAVE_PTHREAD
@@ -80,14 +84,21 @@ if(WIN32)
 endif()
 
 # TODO: Check for GNU_SOURCE properly, this doesn't work...
-check_c_source_compiles("
-	#include <features.h>
-	#ifndef __GNU_LIBRARY__
-	#error no gnu here
-	#endif
-	" _GNU_SOURCE)
-	
-add_definitions(-D_GNU_SOURCE)
+#check_c_source_compiles("
+#	#include <features.h>
+#	#ifndef __GNU_LIBRARY__
+#	#error no gnu here
+#	#endif
+#    int main(int argc, char **argv)
+#    {
+#        return 0;
+#    }
+#	" _GNU_SOURCE)
+CHECK_SYMBOL_EXISTS(__GNU_LIBRARY__ "features.h" _GNU_SOURCE)
+
+if (_GNU_SOURCE)
+    add_definitions(-D_GNU_SOURCE)
+endif()
 
 CHECK_INCLUDE_FILE(sys/types.h EVENT__HAVE_SYS_TYPES_H)
 if(EVENT__HAVE_SYS_TYPES_H)
@@ -109,14 +120,21 @@ if(EVENT__HAVE_NETINET_IN6_H)
     list(APPEND CMAKE_EXTRA_INCLUDE_FILES netinet/in6.h)
 endif()
 
+CHECK_INCLUDE_FILE(unistd.h EVENT__HAVE_UNISTD_H)
 CHECK_INCLUDE_FILE(netdb.h EVENT__HAVE_NETDB_H)
 CHECK_INCLUDE_FILE(dlfcn.h EVENT__HAVE_DLFCN_H)
 CHECK_INCLUDE_FILE(arpa/inet.h EVENT__HAVE_ARPA_INET_H)
 CHECK_INCLUDE_FILE(fcntl.h EVENT__HAVE_FCNTL_H)
+if(EVENT__HAVE_FCNTL_H)
+    list(APPEND CMAKE_EXTRA_INCLUDE_FILES fcntl.h)
+endif()
 CHECK_INCLUDE_FILE(inttypes.h EVENT__HAVE_INTTYPES_H)
 CHECK_INCLUDE_FILE(memory.h EVENT__HAVE_MEMORY_H)
 CHECK_INCLUDE_FILE(poll.h EVENT__HAVE_POLL_H)
 CHECK_INCLUDE_FILE(port.h EVENT__HAVE_PORT_H)
+if(EVENT__HAVE_PORT_H)
+    list(APPEND CMAKE_EXTRA_INCLUDE_FILES port.h)
+endif()
 CHECK_INCLUDE_FILE(signal.h EVENT__HAVE_SIGNAL_H)
 CHECK_INCLUDE_FILE(stdarg.h EVENT__HAVE_STDARG_H)
 CHECK_INCLUDE_FILE(stddef.h EVENT__HAVE_STDDEF_H)
@@ -140,10 +158,15 @@ if(EVENT__HAVE_SYS_TIME_H)
 	list(APPEND CMAKE_EXTRA_INCLUDE_FILES sys/time.h)
 endif()
 CHECK_INCLUDE_FILE(sys/uio.h EVENT__HAVE_SYS_UIO_H)
-CHECK_INCLUDE_FILE(ifaddrs.h EVENT__HAVE_IFADDRS_H)
+CHECK_INCLUDE_FILES("sys/types.h;ifaddrs.h" EVENT__HAVE_IFADDRS_H)
 CHECK_INCLUDE_FILE(mach/mach_time.h EVENT__HAVE_MACH_MACH_TIME_H)
 CHECK_INCLUDE_FILE(netdb.h EVENT__HAVE_NETDB_H)
 CHECK_INCLUDE_FILE(netinet/tcp.h EVENT__HAVE_NETINET_TCP_H)
+CHECK_INCLUDE_FILE(sys/wait.h EVENT__HAVE_SYS_WAIT_H)
+CHECK_INCLUDE_FILE(sys/resource.h EVENT__HAVE_SYS_RESOURCE_H)
+CHECK_INCLUDE_FILE(sys/sysctl.h EVENT__HAVE_SYS_SYSCTL_H)
+CHECK_INCLUDE_FILE(sys/timerfd.h EVENT__HAVE_SYS_TIMERFD_H)
+
 
 CHECK_FUNCTION_EXISTS_EX(epoll_create EVENT__HAVE_EPOLL)
 CHECK_FUNCTION_EXISTS_EX(epoll_ctl EVENT__HAVE_EPOLL_CTL)
@@ -161,6 +184,7 @@ CHECK_FUNCTION_EXISTS_EX(inet_pton EVENT__HAVE_INET_PTON)
 CHECK_FUNCTION_EXISTS_EX(kqueue EVENT__HAVE_KQUEUE)
 CHECK_FUNCTION_EXISTS_EX(mmap EVENT__HAVE_MMAP)
 CHECK_FUNCTION_EXISTS_EX(pipe EVENT__HAVE_PIPE)
+CHECK_FUNCTION_EXISTS_EX(pipe2 EVENT__HAVE_PIPE2)
 CHECK_FUNCTION_EXISTS_EX(poll EVENT__HAVE_POLL)
 CHECK_FUNCTION_EXISTS_EX(port_create EVENT__HAVE_PORT_CREATE)
 CHECK_FUNCTION_EXISTS_EX(sendfile EVENT__HAVE_SENDFILE)
@@ -184,10 +208,52 @@ CHECK_FUNCTION_EXISTS_EX(issetugid EVENT__HAVE_ISSETUGID)
 CHECK_FUNCTION_EXISTS_EX(mach_absolute_time EVENT__HAVE_MACH_ABSOLUTE_TIME)
 CHECK_FUNCTION_EXISTS_EX(nanosleep EVENT__HAVE_NANOSLEEP)
 CHECK_FUNCTION_EXISTS_EX(usleep EVENT__HAVE_USLEEP)
+CHECK_FUNCTION_EXISTS_EX(timeradd EVENT__HAVE_TIMERADD)
+CHECK_FUNCTION_EXISTS_EX(timerclear EVENT__HAVE_TIMERCLEAR)
+CHECK_FUNCTION_EXISTS_EX(timercmp EVENT__HAVE_TIMERCMP)
+CHECK_FUNCTION_EXISTS_EX(timerfd_create HAVE_TIMERFD_CREATE)
+CHECK_FUNCTION_EXISTS_EX(timerisset EVENT__HAVE_TIMERISSET)
+CHECK_FUNCTION_EXISTS_EX(putenv EVENT__HAVE_PUTENV)
+CHECK_FUNCTION_EXISTS_EX(setenv EVENT__HAVE_SETENV)
+CHECK_FUNCTION_EXISTS_EX(setrlimit EVENT__HAVE_SETRLIMIT)
+CHECK_FUNCTION_EXISTS_EX(umask EVENT__HAVE_UMASK)
+CHECK_FUNCTION_EXISTS_EX(unsetenv EVENT__HAVE_UNSETENV)
+
+# Get the gethostbyname_r prototype.
+CHECK_FUNCTION_EXISTS_EX(gethostbyname_r EVENT__HAVE_GETHOSTBYNAME_R)
+
+if(EVENT__HAVE_GETHOSTBYNAME_R)
+    CHECK_PROTOTYPE_DEFINITION(gethostbyname_r 
+        "int gethostbyname_r(const char *name, struct hostent *hp, struct hostent_data *hdata)"
+        "0"
+        "netdb.h"
+        EVENT__HAVE_GETHOSTBYNAME_R_3_ARG)
+
+    CHECK_PROTOTYPE_DEFINITION(gethostbyname_r 
+        "struct hostent *gethostbyname_r(const char *name, struct hostent *hp, char *buf, size_t buflen, int *herr)"
+        "NULL"
+        "netdb.h"
+        EVENT__HAVE_GETHOSTBYNAME_R_5_ARG)
+
+    CHECK_PROTOTYPE_DEFINITION(gethostbyname_r 
+        "int gethostbyname_r(const char *name, struct hostent *hp, char *buf, size_t buflen, struct hostent **result, int *herr)"
+        "0"
+        "netdb.h"
+        EVENT__HAVE_GETHOSTBYNAME_R_6_ARG)
+endif()
+
+if(HAVE_PORT_H AND HAVE_PORT_CREATE)
+    set(EVENT__HAVE_EVENT_PORTS 1)
+endif()
+
 if(NOT WIN32)
 	CHECK_FUNCTION_EXISTS_EX(select EVENT__HAVE_SELECT)
 endif()
 
+CHECK_TYPE_SIZE("uint8_t" EVENT__HAVE_UINT8_T)
+CHECK_TYPE_SIZE("uint16_t" EVENT__HAVE_UINT16_T)
+CHECK_TYPE_SIZE("uint32_t" EVENT__HAVE_UINT32_T)
+CHECK_TYPE_SIZE("uint64_t" EVENT__HAVE_UINT64_T)
 CHECK_TYPE_SIZE("short" EVENT__SIZEOF_SHORT BUILTIN_TYPES_ONLY)
 CHECK_TYPE_SIZE("int" EVENT__SIZEOF_INT BUILTIN_TYPES_ONLY)
 CHECK_TYPE_SIZE("unsigned" EVENT__SIZEOF_UNSIGNED BUILTIN_TYPES_ONLY)
@@ -204,8 +270,16 @@ if(WIN32)
 	set(EVENT__HAVE_INET_NTOP 0)
 	set(EVENT__HAVE_INET_PTON 0)
 else()
-    set(EVENT____func__ __func__)
-    set(EVENT__inline   __inline__)
+    CHECK_SYMBOL_EXISTS(__func__ "stdio.h" HAVE__func__)
+    CHECK_SYMBOL_EXISTS(__func__ "stdio.h" HAVE__inline__)
+
+    if (NOT HAVE__func__)
+        set(EVENT____func__ __func__)
+    endif()
+
+    if (NOT HAVE__inline__)
+        set(EVENT__inline __inline__)
+    endif()
 endif()
 
 CHECK_SYMBOL_EXISTS(TAILQ_FOREACH sys/queue.h EVENT__HAVE_TAILQFOREACH)
@@ -213,6 +287,7 @@ CHECK_SYMBOL_EXISTS(CTL_KERN sys/sysctl.h EVENT__HAVE_DECL_CTL_KERN)
 CHECK_SYMBOL_EXISTS(KERN_ARND sys/sysctl.h EVENT__HAVE_DECL_KERN_ARND)
 CHECK_SYMBOL_EXISTS(KERN_RANDOM sys/sysctl.h EVENT__HAVE_DECL_KERN_RANDOM)
 CHECK_SYMBOL_EXISTS(RANDOM_UUID sys/sysctl.h EVENT__HAVE_DECL_RANDOM_UUID)
+CHECK_SYMBOL_EXISTS(F_SETFD fcntl.h EVENT__HAVE_SETFD)
 
 CHECK_TYPE_SIZE(fd_mask EVENT__HAVE_FD_MASK)
 
@@ -221,6 +296,8 @@ if(NOT EVENT__SIZEOF_SIZE_T)
   set(EVENT__size_t unsigned)
   set(EVENT__SIZEOF_SIZE_T ${EVENT__SIZEOF_UNSIGNED})
 endif()
+
+CHECK_TYPE_SIZE("off_t" EVENT__SIZEOF_OFF_T)
 
 CHECK_TYPE_SIZE(ssize_t EVENT__SIZEOF_SSIZE_T)
 CHECK_TYPE_SIZE(SSIZE_T EVENT__SIZEOF_UPPERCASE_SSIZE_T)
@@ -246,12 +323,25 @@ if(NOT EVENT__SIZEOF_PID_T)
   set(EVENT__SIZEOF_PID_T ${EVENT__SIZEOF_INT})
 endif()
 
+CHECK_TYPE_SIZE(pthread_t EVENT__SIZEOF_PTHREAD_T)
+
 if(EVENT__HAVE_CLOCK_GETTIME)
   set(EVENT__DNS_USE_CPU_CLOCK_FOR_ID 1)
 endif()
 
 CHECK_TYPE_SIZE("uintptr_t" EVENT__HAVE_UINTPTR_T)
 CHECK_TYPE_SIZE("void *" EVENT__SIZEOF_VOID_P)
+
+# Tests file offset bits.
+# TODO: Add AIX test for if -D_LARGE_FILES is needed.
+CHECK_FILE_OFFSET_BITS()
+set(EVENT___FILE_OFFSET_BITS _FILE_OFFSET_BITS)
+
+# TODO: Check EVENT__HAVE_WORKING_KQUEUE (Define if kqueue works correctly with pipes)
+
+CHECK_SYMBOL_EXISTS(_MINIX "stdio.h" EVENT___MINIX)
+CHECK_SYMBOL_EXISTS(_POSIX_1_SOURCE "stdio.h" EVENT___POSIX_1_SOURCE)
+CHECK_SYMBOL_EXISTS(_POSIX_SOURCE "stdio.h" EVENT___POSIX_SOURCE)
 
 if(EVENT__HAVE_NETDB_H)
 	list(APPEND CMAKE_EXTRA_INCLUDE_FILES netdb.h)
@@ -374,7 +464,7 @@ if(EVENT__HAVE_EPOLL)
     list(APPEND SRC_CORE epoll_sub.c epoll.c)
 endif()
 
-if(EVENT__HAVE_EPORT)
+if(EVENT__HAVE_EVENT_PORTS)
     list(APPEND SRC_CORE evport.c)
 endif()
 
@@ -386,6 +476,7 @@ endif()
 
 if(ZLIB_LIBRARY)
     set(EVENT__HAVE_ZLIB 1)
+    set(EVENT__HAVE_ZLIB_H)
 	include_directories(${ZLIB_INCLUDE_DIRS})
     list(APPEND SRC_REGRESS test/regress_zlib.c)
     list(APPEND LIB_REGRESS ${ZLIB_LIBRARIES})
