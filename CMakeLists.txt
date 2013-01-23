@@ -96,7 +96,9 @@ endif()
 #	" _GNU_SOURCE)
 CHECK_SYMBOL_EXISTS(__GNU_LIBRARY__ "features.h" _GNU_SOURCE)
 
-#add_definitions(-D_GNU_SOURCE)
+if (_GNU_SOURCE)
+    add_definitions(-D_GNU_SOURCE)
+endif()
 
 CHECK_INCLUDE_FILE(sys/types.h EVENT__HAVE_SYS_TYPES_H)
 if(EVENT__HAVE_SYS_TYPES_H)
