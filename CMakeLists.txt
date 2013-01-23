@@ -59,8 +59,9 @@ SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 SET(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 SET(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 
-include("cmake/CheckFunctionExistsEx.cmake")
-include("cmake/CheckFileOffsetBits.cmake")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake/")
+include(CheckFunctionExistsEx)
+include(CheckFileOffsetBits)
 include(CheckFunctionExists)
 include(CheckIncludeFile)
 include(CheckIncludeFiles)
@@ -221,21 +222,21 @@ CHECK_FUNCTION_EXISTS_EX(gethostbyname_r EVENT__HAVE_GETHOSTBYNAME_R)
 
 if(EVENT__HAVE_GETHOSTBYNAME_R)
     CHECK_PROTOTYPE_DEFINITION(gethostbyname_r 
-        "int gethostbyname_r(char *name, struct hostent *hp, struct hostent_data *hdata)"
+        "int gethostbyname_r(const char *name, struct hostent *hp, struct hostent_data *hdata)"
         "0"
-        "stdio.h;sys/types.h;netdb.h"
+        "netdb.h"
         EVENT__HAVE_GETHOSTBYNAME_R_3_ARG)
 
     CHECK_PROTOTYPE_DEFINITION(gethostbyname_r 
-        "struct hostent *gethostbyname_r(char *name, struct hostent *hp, char *buf, size_t buflen, int *herr)"
+        "struct hostent *gethostbyname_r(const char *name, struct hostent *hp, char *buf, size_t buflen, int *herr)"
         "NULL"
-        "stdio.h;sys/types.h;netdb.h"
+        "netdb.h"
         EVENT__HAVE_GETHOSTBYNAME_R_5_ARG)
 
     CHECK_PROTOTYPE_DEFINITION(gethostbyname_r 
-        "int gethostbyname_r(char *name, struct hostent *hp, char *buf, size_t buflen, struct hostent **result, int *herr)"
+        "int gethostbyname_r(const char *name, struct hostent *hp, char *buf, size_t buflen, struct hostent **result, int *herr)"
         "0"
-        "stdio.h;sys/types.h;netdb.h"
+        "netdb.h"
         EVENT__HAVE_GETHOSTBYNAME_R_6_ARG)
 endif()
 
