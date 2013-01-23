@@ -89,8 +89,12 @@
 #define open _open
 #define read _read
 #define close _close
+#ifndef fstat
 #define fstat _fstati64
+#endif
+#ifndef stat
 #define stat _stati64
+#endif
 #define mode_t int
 #endif
 
@@ -266,7 +270,6 @@ evutil_ersatz_socketpair_(int family, int type, int protocol,
 		goto tidy_up_and_fail;
 	if (size != sizeof(listen_addr))
 		goto abort_tidy_up_and_fail;
-	evutil_closesocket(listener);
 	/* Now check we are talking to ourself by matching port and host on the
 	   two sockets.	 */
 	if (getsockname(connector, (struct sockaddr *) &connect_addr, &size) == -1)
@@ -276,6 +279,7 @@ evutil_ersatz_socketpair_(int family, int type, int protocol,
 		|| listen_addr.sin_addr.s_addr != connect_addr.sin_addr.s_addr
 		|| listen_addr.sin_port != connect_addr.sin_port)
 		goto abort_tidy_up_and_fail;
+	evutil_closesocket(listener);
 	fd[0] = connector;
 	fd[1] = acceptor;
 
@@ -2193,6 +2197,27 @@ int evutil_ascii_strncasecmp(const char *s1, const char *s2, size_t n)
 			return 0;
 	}
 	return 0;
+}
+
+void
+evutil_rtrim_lws_(char *str)
+{
+	char *cp;
+
+	if (str == NULL)
+		return;
+
+	if ((cp = strchr(str, '\0')) == NULL || (cp == str))
+		return;
+
+	--cp;
+
+	while (*cp == ' ' || *cp == '\t') {
+		*cp = '\0';
+		if (cp == str)
+			break;
+		--cp;
+	}
 }
 
 static int

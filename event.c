@@ -259,9 +259,10 @@ HT_GENERATE(event_debug_map, event_debug_entry, node, hash_debug_entry,
 		} else {						\
 			event_errx(EVENT_ERR_ABORT_,			\
 			    "%s: noting an add on a non-setup event %p" \
-			    " (events: 0x%x, fd: %d, flags: 0x%x)",	\
+			    " (events: 0x%x, fd: "EV_SOCK_FMT		\
+			    ", flags: 0x%x)",				\
 			    __func__, (ev), (ev)->ev_events,		\
-			    (ev)->ev_fd, (ev)->ev_flags);		\
+			    EV_SOCK_ARG((ev)->ev_fd), (ev)->ev_flags);	\
 		}							\
 		EVLOCK_UNLOCK(event_debug_map_lock_, 0);		\
 	}								\
@@ -279,9 +280,10 @@ HT_GENERATE(event_debug_map, event_debug_entry, node, hash_debug_entry,
 		} else {						\
 			event_errx(EVENT_ERR_ABORT_,			\
 			    "%s: noting a del on a non-setup event %p"	\
-			    " (events: 0x%x, fd: %d, flags: 0x%x)",	\
+			    " (events: 0x%x, fd: "EV_SOCK_FMT		\
+			    ", flags: 0x%x)",				\
 			    __func__, (ev), (ev)->ev_events,		\
-			    (ev)->ev_fd, (ev)->ev_flags);		\
+			    EV_SOCK_ARG((ev)->ev_fd), (ev)->ev_flags);	\
 		}							\
 		EVLOCK_UNLOCK(event_debug_map_lock_, 0);		\
 	}								\
@@ -297,9 +299,10 @@ HT_GENERATE(event_debug_map, event_debug_entry, node, hash_debug_entry,
 		if (!dent) {						\
 			event_errx(EVENT_ERR_ABORT_,			\
 			    "%s called on a non-initialized event %p"	\
-			    " (events: 0x%x, fd: %d, flags: 0x%x)",	\
+			    " (events: 0x%x, fd: "EV_SOCK_FMT\
+			    ", flags: 0x%x)",				\
 			    __func__, (ev), (ev)->ev_events,		\
-			    (ev)->ev_fd, (ev)->ev_flags);		\
+			    EV_SOCK_ARG((ev)->ev_fd), (ev)->ev_flags);	\
 		}							\
 		EVLOCK_UNLOCK(event_debug_map_lock_, 0);		\
 	}								\
@@ -315,9 +318,10 @@ HT_GENERATE(event_debug_map, event_debug_entry, node, hash_debug_entry,
 		if (dent && dent->added) {				\
 			event_errx(EVENT_ERR_ABORT_,			\
 			    "%s called on an already added event %p"	\
-			    " (events: 0x%x, fd: %d, flags: 0x%x)",	\
+			    " (events: 0x%x, fd: "EV_SOCK_FMT", "	\
+			    "flags: 0x%x)",				\
 			    __func__, (ev), (ev)->ev_events,		\
-			    (ev)->ev_fd, (ev)->ev_flags);		\
+			    EV_SOCK_ARG((ev)->ev_fd), (ev)->ev_flags);	\
 		}							\
 		EVLOCK_UNLOCK(event_debug_map_lock_, 0);		\
 	}								\
@@ -800,6 +804,12 @@ event_base_free(struct event_base *base)
 	if (n_deleted)
 		event_debug(("%s: %d events were still set in base",
 			__func__, n_deleted));
+
+	while (LIST_FIRST(&base->once_events)) {
+		struct event_once *eonce = LIST_FIRST(&base->once_events);
+		LIST_REMOVE(eonce, next_once);
+		mm_free(eonce);
+	}
 
 	if (base->evsel != NULL && base->evsel->dealloc != NULL)
 		base->evsel->dealloc(base);
@@ -1767,14 +1777,6 @@ done:
 	return (retval);
 }
 
-/* Sets up an event for processing once */
-struct event_once {
-	struct event ev;
-
-	void (*cb)(evutil_socket_t, short, void *);
-	void *arg;
-};
-
 /* One-time callback to implement event_base_once: invokes the user callback,
  * then deletes the allocated storage */
 static void
@@ -1783,6 +1785,9 @@ event_once_cb(evutil_socket_t fd, short events, void *arg)
 	struct event_once *eonce = arg;
 
 	(*eonce->cb)(fd, events, eonce->arg);
+	EVBASE_ACQUIRE_LOCK(eonce->ev.ev_base, th_base_lock);
+	LIST_REMOVE(eonce, next_once);
+	EVBASE_RELEASE_LOCK(eonce->ev.ev_base, th_base_lock);
 	event_debug_unassign(&eonce->ev);
 	mm_free(eonce);
 }
@@ -1804,6 +1809,7 @@ event_base_once(struct event_base *base, evutil_socket_t fd, short events,
 {
 	struct event_once *eonce;
 	int res = 0;
+	int activate = 0;
 
 	/* We cannot support signals that just fire once, or persistent
 	 * events. */
@@ -1824,8 +1830,7 @@ event_base_once(struct event_base *base, evutil_socket_t fd, short events,
 			 * don't put it on the timeout queue.  This is one
 			 * idiom for scheduling a callback, so let's make
 			 * it fast (and order-preserving). */
-			event_active(&eonce->ev, EV_TIMEOUT, 1);
-			return 0;
+			activate = 1;
 		}
 	} else if (events & (EV_READ|EV_WRITE)) {
 		events &= EV_READ|EV_WRITE;
@@ -1837,11 +1842,20 @@ event_base_once(struct event_base *base, evutil_socket_t fd, short events,
 		return (-1);
 	}
 
-	if (res == 0)
-		res = event_add(&eonce->ev, tv);
-	if (res != 0) {
-		mm_free(eonce);
-		return (res);
+	if (res == 0) {
+		EVBASE_ACQUIRE_LOCK(base, th_base_lock);
+		if (activate)
+			event_active_nolock_(&eonce->ev, EV_TIMEOUT, 1);
+		else
+			res = event_add_nolock_(&eonce->ev, tv, 0);
+
+		if (res != 0) {
+			mm_free(eonce);
+			return (res);
+		} else {
+			LIST_INSERT_HEAD(&base->once_events, eonce, next_once);
+		}
+		EVBASE_RELEASE_LOCK(base, th_base_lock);
 	}
 
 	return (0);
@@ -2005,6 +2019,11 @@ event_pending(const struct event *ev, short event, struct timeval *tv)
 {
 	int flags = 0;
 
+	if (EVUTIL_FAILURE_CHECK(ev->ev_base == NULL)) {
+		event_warnx("%s: event has no event_base set.", __func__);
+		return 0;
+	}
+
 	EVBASE_ACQUIRE_LOCK(ev->ev_base, th_base_lock);
 	event_debug_assert_is_setup_(ev);
 
@@ -2138,7 +2157,7 @@ evthread_notify_base_default(struct event_base *base)
 #else
 	r = write(base->th_notify_fd[1], buf, 1);
 #endif
-	return (r < 0 && errno != EAGAIN) ? -1 : 0;
+	return (r < 0 && ! EVUTIL_ERR_IS_EAGAIN(errno)) ? -1 : 0;
 }
 
 #ifdef EVENT__HAVE_EVENTFD
@@ -2173,6 +2192,45 @@ evthread_notify_base(struct event_base *base)
 	return base->th_notify_fn(base);
 }
 
+/* Implementation function to remove a timeout on a currently pending event.
+ */
+int
+event_remove_timer_nolock_(struct event *ev)
+{
+	struct event_base *base = ev->ev_base;
+
+	EVENT_BASE_ASSERT_LOCKED(base);
+	event_debug_assert_is_setup_(ev);
+
+	event_debug(("event_remove_timer_nolock: event: %p", ev));
+
+	/* If it's not pending on a timeout, we don't need to do anything. */
+	if (ev->ev_flags & EVLIST_TIMEOUT) {
+		event_queue_remove_timeout(base, ev);
+	}
+
+	return (0);
+}
+
+int
+event_remove_timer(struct event *ev)
+{
+	int res;
+
+	if (EVUTIL_FAILURE_CHECK(!ev->ev_base)) {
+		event_warnx("%s: event has no event_base set.", __func__);
+		return -1;
+	}
+
+	EVBASE_ACQUIRE_LOCK(ev->ev_base, th_base_lock);
+
+	res = event_remove_timer_nolock_(ev);
+
+	EVBASE_RELEASE_LOCK(ev->ev_base, th_base_lock);
+
+	return (res);
+}
+
 /* Implementation function to add an event.  Works just like event_add,
  * except: 1) it requires that we have the lock.  2) if tv_is_absolute is set,
  * we treat tv as an absolute time, not as an interval to add to the current
@@ -2189,9 +2247,9 @@ event_add_nolock_(struct event *ev, const struct timeval *tv,
 	event_debug_assert_is_setup_(ev);
 
 	event_debug((
-		 "event_add: event: %p (fd %d), %s%s%scall %p",
+		 "event_add: event: %p (fd "EV_SOCK_FMT"), %s%s%scall %p",
 		 ev,
-		 (int)ev->ev_fd,
+		 EV_SOCK_ARG(ev->ev_fd),
 		 ev->ev_events & EV_READ ? "EV_READ " : " ",
 		 ev->ev_events & EV_WRITE ? "EV_WRITE " : " ",
 		 tv ? "EV_TIMEOUT " : " ",
@@ -2363,8 +2421,8 @@ event_del_nolock_(struct event *ev)
 	struct event_base *base;
 	int res = 0, notify = 0;
 
-	event_debug(("event_del: %p (fd %d), callback %p",
-		ev, (int)ev->ev_fd, ev->ev_callback));
+	event_debug(("event_del: %p (fd "EV_SOCK_FMT"), callback %p",
+		ev, EV_SOCK_ARG(ev->ev_fd), ev->ev_callback));
 
 	/* An event without a base has not been added */
 	if (ev->ev_base == NULL)
@@ -2457,8 +2515,8 @@ event_active_nolock_(struct event *ev, int res, short ncalls)
 {
 	struct event_base *base;
 
-	event_debug(("event_active: %p (fd %d), res %d, callback %p",
-		ev, (int)ev->ev_fd, (int)res, ev->ev_callback));
+	event_debug(("event_active: %p (fd "EV_SOCK_FMT"), res %d, callback %p",
+		ev, EV_SOCK_ARG(ev->ev_fd), (int)res, ev->ev_callback));
 
 	base = ev->ev_base;
 	EVENT_BASE_ASSERT_LOCKED(base);
@@ -2743,8 +2801,8 @@ event_queue_remove_inserted(struct event_base *base, struct event *ev)
 {
 	EVENT_BASE_ASSERT_LOCKED(base);
 	if (EVUTIL_FAILURE_CHECK(!(ev->ev_flags & EVLIST_INSERTED))) {
-		event_errx(1, "%s: %p(fd %d) not on queue %x", __func__,
-			   ev, ev->ev_fd, EVLIST_INSERTED);
+		event_errx(1, "%s: %p(fd "EV_SOCK_FMT") not on queue %x", __func__,
+		    ev, EV_SOCK_ARG(ev->ev_fd), EVLIST_INSERTED);
 		return;
 	}
 	DECR_EVENT_COUNT(base, ev->ev_flags);
@@ -2786,8 +2844,8 @@ event_queue_remove_timeout(struct event_base *base, struct event *ev)
 {
 	EVENT_BASE_ASSERT_LOCKED(base);
 	if (EVUTIL_FAILURE_CHECK(!(ev->ev_flags & EVLIST_TIMEOUT))) {
-		event_errx(1, "%s: %p(fd %d) not on queue %x", __func__,
-			   ev, ev->ev_fd, EVLIST_TIMEOUT);
+		event_errx(1, "%s: %p(fd "EV_SOCK_FMT") not on queue %x", __func__,
+		    ev, EV_SOCK_ARG(ev->ev_fd), EVLIST_TIMEOUT);
 		return;
 	}
 	DECR_EVENT_COUNT(base, ev->ev_flags);
@@ -2881,8 +2939,8 @@ event_queue_insert_inserted(struct event_base *base, struct event *ev)
 	EVENT_BASE_ASSERT_LOCKED(base);
 
 	if (EVUTIL_FAILURE_CHECK(ev->ev_flags & EVLIST_INSERTED)) {
-		event_errx(1, "%s: %p(fd %d) already inserted", __func__,
-			   ev, ev->ev_fd);
+		event_errx(1, "%s: %p(fd "EV_SOCK_FMT") already inserted", __func__,
+		    ev, EV_SOCK_ARG(ev->ev_fd));
 		return;
 	}
 
@@ -2933,8 +2991,8 @@ event_queue_insert_timeout(struct event_base *base, struct event *ev)
 	EVENT_BASE_ASSERT_LOCKED(base);
 
 	if (EVUTIL_FAILURE_CHECK(ev->ev_flags & EVLIST_TIMEOUT)) {
-		event_errx(1, "%s: %p(fd %d) already on timeout", __func__,
-			   ev, ev->ev_fd);
+		event_errx(1, "%s: %p(fd "EV_SOCK_FMT") already on timeout", __func__,
+		    ev, EV_SOCK_ARG(ev->ev_fd));
 		return;
 	}
 
@@ -3193,8 +3251,8 @@ evthread_make_base_notifiable_nolock_(struct event_base *base)
 }
 
 int
-event_base_foreach_event_(struct event_base *base,
-    int (*fn)(struct event_base *, struct event *, void *), void *arg)
+event_base_foreach_event_nolock_(struct event_base *base,
+    event_base_foreach_event_cb fn, void *arg)
 {
 	int r, i;
 	unsigned u;
@@ -3255,7 +3313,7 @@ event_base_foreach_event_(struct event_base *base,
 /* Helper for event_base_dump_events: called on each event in the event base;
  * dumps only the inserted events. */
 static int
-dump_inserted_event_fn(struct event_base *base, struct event *e, void *arg)
+dump_inserted_event_fn(const struct event_base *base, const struct event *e, void *arg)
 {
 	FILE *output = arg;
 	const char *gloss = (e->ev_events & EV_SIGNAL) ?
@@ -3264,8 +3322,8 @@ dump_inserted_event_fn(struct event_base *base, struct event *e, void *arg)
 	if (! (e->ev_flags & (EVLIST_INSERTED|EVLIST_TIMEOUT)))
 		return 0;
 
-	fprintf(output, "  %p [%s %ld]%s%s%s%s%s",
-	    (void*)e, gloss, (long)e->ev_fd,
+	fprintf(output, "  %p [%s "EV_SOCK_FMT"]%s%s%s%s%s",
+	    (void*)e, gloss, EV_SOCK_ARG(e->ev_fd),
 	    (e->ev_events&EV_READ)?" Read":"",
 	    (e->ev_events&EV_WRITE)?" Write":"",
 	    (e->ev_events&EV_SIGNAL)?" Signal":"",
@@ -3287,7 +3345,7 @@ dump_inserted_event_fn(struct event_base *base, struct event *e, void *arg)
 /* Helper for event_base_dump_events: called on each event in the event base;
  * dumps only the active events. */
 static int
-dump_active_event_fn(struct event_base *base, struct event *e, void *arg)
+dump_active_event_fn(const struct event_base *base, const struct event *e, void *arg)
 {
 	FILE *output = arg;
 	const char *gloss = (e->ev_events & EV_SIGNAL) ?
@@ -3296,8 +3354,8 @@ dump_active_event_fn(struct event_base *base, struct event *e, void *arg)
 	if (! (e->ev_flags & (EVLIST_ACTIVE|EVLIST_ACTIVE_LATER)))
 		return 0;
 
-	fprintf(output, "  %p [%s %ld, priority=%d]%s%s%s%s active%s%s\n",
-	    (void*)e, gloss, (long)e->ev_fd, e->ev_pri,
+	fprintf(output, "  %p [%s "EV_SOCK_FMT", priority=%d]%s%s%s%s active%s%s\n",
+	    (void*)e, gloss, EV_SOCK_ARG(e->ev_fd), e->ev_pri,
 	    (e->ev_res&EV_READ)?" Read":"",
 	    (e->ev_res&EV_WRITE)?" Write":"",
 	    (e->ev_res&EV_SIGNAL)?" Signal":"",
@@ -3308,14 +3366,31 @@ dump_active_event_fn(struct event_base *base, struct event *e, void *arg)
 	return 0;
 }
 
+int
+event_base_foreach_event(struct event_base *base,
+    event_base_foreach_event_cb fn, void *arg)
+{
+	int r;
+	if ((!fn) || (!base)) {
+		return -1;
+	}
+	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
+	r = event_base_foreach_event_nolock_(base, fn, arg);
+	EVBASE_RELEASE_LOCK(base, th_base_lock);
+	return r;
+}
+
+
 void
 event_base_dump_events(struct event_base *base, FILE *output)
 {
+	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
 	fprintf(output, "Inserted events:\n");
-	event_base_foreach_event_(base, dump_inserted_event_fn, output);
+	event_base_foreach_event_nolock_(base, dump_inserted_event_fn, output);
 
 	fprintf(output, "Active events:\n");
-	event_base_foreach_event_(base, dump_active_event_fn, output);
+	event_base_foreach_event_nolock_(base, dump_active_event_fn, output);
+	EVBASE_RELEASE_LOCK(base, th_base_lock);
 }
 
 void

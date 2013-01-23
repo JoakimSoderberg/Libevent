@@ -32,10 +32,16 @@ T=`echo "$0" | sed -e 's/test.sh$//'`
 if test -x "$T/test-init"
 then
 	TEST_DIR="$T"
+elif test -x "./test/test-init"
+then
+        TEST_DIR="./test"
 fi
 if test -f "$T/check-dumpevents.py"
 then
 	TEST_SRC_DIR="$T"
+elif test -f "./test/check-dumpevents.py"
+then
+        TEST_SRC_DIR="./test"
 fi
 
 setup () {
@@ -76,8 +82,8 @@ run_tests () {
 		fi
 	done
 	announce_n " test-dumpevents: "
-	if python -c 'import sys; assert(sys.version_info >= (2, 4))' 2>/dev/null; then
-	    if $TEST_DIR/test-dumpevents | python $TEST_SRC_DIR/check-dumpevents.py >> "$TEST_OUTPUT_FILE" ;
+	if python2 -c 'import sys; assert(sys.version_info >= (2, 4))' 2>/dev/null; then
+	    if $TEST_DIR/test-dumpevents | python2 $TEST_SRC_DIR/check-dumpevents.py >> "$TEST_OUTPUT_FILE" ;
 	    then
 	        announce OKAY ;
 	    else

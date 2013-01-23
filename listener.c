@@ -402,6 +402,7 @@ listener_read_cb(evutil_socket_t fd, short what, void *p)
 		}
 
 		if (lev->cb == NULL) {
+			evutil_closesocket(new_fd);
 			UNLOCK(lev);
 			return;
 		}
@@ -737,6 +738,10 @@ iocp_listener_disable_impl(struct evconnlistener *lev, int shutdown)
 		}
 		LeaveCriticalSection(&as->lock);
 	}
+
+	if (shutdown && lev->flags & LEV_OPT_CLOSE_ON_FREE)
+		evutil_closesocket(lev_iocp->fd);
+
 	UNLOCK(lev);
 	return 0;
 }

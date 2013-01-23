@@ -88,7 +88,7 @@ print_err(int val)
 	int err;
 	printf("Error was %d\n", val);
 
-	while ((err = ERR_get_error()))x {
+	while ((err = ERR_get_error())) {
 		const char *msg = (const char*)ERR_reason_error_string(err);
 		const char *lib = (const char*)ERR_lib_error_string(err);
 		const char *func = (const char*)ERR_func_error_string(err);
@@ -565,7 +565,7 @@ decrement_buckets(struct bufferevent_openssl *bev_ssl)
 
 /* Return a bitmask of OP_MADE_PROGRESS (if we read anything); OP_BLOCKED (if
    we're now blocked); and OP_ERR (if an error occurred). */
- static int
+static int
 do_read(struct bufferevent_openssl *bev_ssl, int n_to_read) {
 	/* Requires lock */
 	struct bufferevent *bev = &bev_ssl->bev.bev;
@@ -573,6 +573,9 @@ do_read(struct bufferevent_openssl *bev_ssl, int n_to_read) {
 	int r, n, i, n_used = 0, atmost;
 	struct evbuffer_iovec space[2];
 	int result = 0;
+
+	if (bev_ssl->bev.read_suspended)
+		return 0;
 
 	atmost = bufferevent_get_read_max_(&bev_ssl->bev);
 	if (n_to_read > atmost)
@@ -786,6 +789,9 @@ consider_reading(struct bufferevent_openssl *bev_ssl)
 		if (r & (OP_BLOCKED|OP_ERR))
 			break;
 
+		if (bev_ssl->bev.read_suspended)
+			break;
+        
 		/* Read all pending data.  This won't hit the network
 		 * again, and will (most importantly) put us in a state
 		 * where we don't need to read anything else until the
@@ -928,11 +934,12 @@ be_openssl_readeventcb(evutil_socket_t fd, short what, void *ptr)
 {
 	struct bufferevent_openssl *bev_ssl = ptr;
 	bufferevent_incref_and_lock_(&bev_ssl->bev.bev);
-	if (what & EV_TIMEOUT) {
+	if (what == EV_TIMEOUT) {
 		bufferevent_run_eventcb_(&bev_ssl->bev.bev,
 		    BEV_EVENT_TIMEOUT|BEV_EVENT_READING);
-	} else
+	} else {
 		consider_reading(bev_ssl);
+	}
 	bufferevent_decref_and_unlock_(&bev_ssl->bev.bev);
 }
 
@@ -941,11 +948,12 @@ be_openssl_writeeventcb(evutil_socket_t fd, short what, void *ptr)
 {
 	struct bufferevent_openssl *bev_ssl = ptr;
 	bufferevent_incref_and_lock_(&bev_ssl->bev.bev);
-	if (what & EV_TIMEOUT) {
+	if (what == EV_TIMEOUT) {
 		bufferevent_run_eventcb_(&bev_ssl->bev.bev,
 		    BEV_EVENT_TIMEOUT|BEV_EVENT_WRITING);
+	} else {
+		consider_writing(bev_ssl);
 	}
-	consider_writing(bev_ssl);
 	bufferevent_decref_and_unlock_(&bev_ssl->bev.bev);
 }
 
@@ -1213,14 +1221,25 @@ be_openssl_adj_timeouts(struct bufferevent *bev)
 {
 	struct bufferevent_openssl *bev_ssl = upcast(bev);
 
-	if (bev_ssl->underlying)
+	if (bev_ssl->underlying) {
 		return bufferevent_generic_adj_timeouts_(bev);
-	else {
+	} else {
 		int r1=0, r2=0;
-		if (event_pending(&bev->ev_read, EV_READ, NULL))
-			r1 = bufferevent_add_event_(&bev->ev_read, &bev->timeout_read);
-		if (event_pending(&bev->ev_write, EV_WRITE, NULL))
-			r2 = bufferevent_add_event_(&bev->ev_write, &bev->timeout_write);
+		if (event_pending(&bev->ev_read, EV_READ, NULL)) {
+			if (evutil_timerisset(&bev->timeout_read)) {
+				r1 = bufferevent_add_event_(&bev->ev_read, &bev->timeout_read);
+			} else {
+				event_remove_timer(&bev->ev_read);
+			}
+		}
+		if (event_pending(&bev->ev_write, EV_WRITE, NULL)) {
+			if (evutil_timerisset(&bev->timeout_write)) {
+				r2 = bufferevent_add_event_(&bev->ev_write, &bev->timeout_write);
+			} else {
+				event_remove_timer(&bev->ev_write);
+			}
+		}
+
 		return (r1<0 || r2<0) ? -1 : 0;
 	}
 }
