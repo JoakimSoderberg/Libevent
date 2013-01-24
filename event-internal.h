@@ -179,6 +179,15 @@ extern int event_debug_mode_on_;
 
 TAILQ_HEAD(evcallback_list, event_callback);
 
+/* Sets up an event for processing once */
+struct event_once {
+	LIST_ENTRY(event_once) next_once;
+	struct event ev;
+
+	void (*cb)(evutil_socket_t, short, void *);
+	void *arg;
+};
+
 struct event_base {
 	/** Function pointers and other data to describe this event_base's
 	 * backend. */
@@ -310,6 +319,10 @@ struct event_base {
 	/** Saved seed for weak random number generator. Some backends use
 	 * this to produce fairness among sockets. Protected by th_base_lock. */
 	struct evutil_weakrand_state weakrand_seed;
+
+	/** List of event_onces that have not yet fired. */
+	LIST_HEAD(once_event_list, event_once) once_events;
+
 };
 
 struct event_config_entry {
@@ -370,6 +383,7 @@ int evsig_restore_handler_(struct event_base *base, int evsignal);
 int event_add_nolock_(struct event *ev,
     const struct timeval *tv, int tv_is_absolute);
 int event_del_nolock_(struct event *ev);
+int event_remove_timer_nolock_(struct event *ev);
 
 void event_active_nolock_(struct event *ev, int res, short count);
 int event_callback_activate_(struct event_base *, struct event_callback *);
@@ -400,9 +414,6 @@ void event_base_assert_ok_(struct event_base *base);
 void event_base_assert_ok_nolock_(struct event_base *base);
 
 
-/* Callback type for event_base_foreach_event. */
-typedef int (*event_base_foreach_event_cb)(struct event_base *base, struct event *, void *);
-
 /* Helper function: Call 'fn' exactly once every inserted or active event in
  * the event_base 'base'.
  *
@@ -411,7 +422,7 @@ typedef int (*event_base_foreach_event_cb)(struct event_base *base, struct event
  *
  * Requires that 'base' be locked.
  */
-int event_base_foreach_event_(struct event_base *base,
+int event_base_foreach_event_nolock_(struct event_base *base,
     event_base_foreach_event_cb cb, void *arg);
 
 #ifdef __cplusplus
