@@ -565,17 +565,17 @@ configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/event-config.h.cmake 
     ${CMAKE_CURRENT_SOURCE_DIR}/include/event2/event-config.h)
 
-add_library(libevent_core STATIC
+add_library(event_core STATIC
     ${HDR_PRIVATE}
     ${HDR_PUBLIC}
     ${SRC_CORE}
     )
     
-add_library(libevent_extras STATIC
+add_library(event_extras STATIC
     ${SRC_EXTRA}
     )
     
-add_library(libevent STATIC
+add_library(event STATIC
     ${HDR_PRIVATE}
     ${HDR_PUBLIC}
     ${SRC_CORE}
@@ -584,25 +584,25 @@ add_library(libevent STATIC
 
 # TODO: Make these into tests instead?
 #add_executable(event-test sample/event-test.c)
-#target_link_libraries(event-test libevent ${LIB_PLATFORM})
+#target_link_libraries(event-test event ${LIB_PLATFORM})
 
 add_executable(time-test sample/time-test.c)
-target_link_libraries(time-test libevent ${LIB_PLATFORM})
+target_link_libraries(time-test event ${LIB_PLATFORM})
 
 add_executable(signal-test sample/signal-test.c)
-target_link_libraries(signal-test libevent ${LIB_PLATFORM})
+target_link_libraries(signal-test event ${LIB_PLATFORM})
 
 #add_executable(test-init test/test-init.c)
-#target_link_libraries(test-init libevent ${LIB_PLATFORM})
+#target_link_libraries(test-init event ${LIB_PLATFORM})
 
 #add_executable(test-eof test/test-eof.c)
-#target_link_libraries(test-eof libevent ${LIB_PLATFORM})
+#target_link_libraries(test-eof event ${LIB_PLATFORM})
 
 #add_executable(test-weof test/test-weof.c)
-#target_link_libraries(test-weof libevent ${LIB_PLATFORM})
+#target_link_libraries(test-weof event ${LIB_PLATFORM})
 
 #add_executable(time-test test/time-test.c)
-#target_link_libraries(time-test libevent ${LIB_PLATFORM})
+#target_link_libraries(time-test event ${LIB_PLATFORM})
 
 if (PYTHONINTERP_FOUND)
     message("Generating regress tests...")
@@ -638,16 +638,16 @@ if (PYTHONINTERP_FOUND)
         )
 
     add_executable(regress ${SRC_REGRESS})
-    target_link_libraries(regress libevent ${LIB_REGRESS} ${CMAKE_THREAD_LIBS_INIT} ${LIB_PLATFORM})
+    target_link_libraries(regress event ${LIB_REGRESS} ${CMAKE_THREAD_LIBS_INIT} ${LIB_PLATFORM})
 else()
     warning("Python not found, cannot generate regress tests!")
 endif()
 
 add_executable(bench_cascade test/bench_cascade.c)
-target_link_libraries(bench_cascade libevent ${LIB_PLATFORM})
+target_link_libraries(bench_cascade event ${LIB_PLATFORM})
 
 add_executable(bench_http test/bench_http.c)
-target_link_libraries(bench_http libevent ${LIB_PLATFORM})
+target_link_libraries(bench_http event ${LIB_PLATFORM})
 
 # Tests.
 enable_testing()
