@@ -290,7 +290,7 @@ foreach(KEYWORD "__func__" "__FUNCTION__")
 endforeach()
 set(CMAKE_REQUIRED_DEFINITIONS "")
 
-if (NOT HAVE__func__)
+if (NOT HAVE___func__)
     if (HAVE___FUNCTION__)
         set(EVENT____func__ __FUNCTION__)
     else()
