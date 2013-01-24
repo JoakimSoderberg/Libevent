@@ -380,19 +380,19 @@ if (WIN32)
     endif()
 else()
     if (EVENT__HAVE_NETINET_IN_H)
-        list(append SOCKADDR_HEADERS netinet/in.h)
+        set(SOCKADDR_HEADERS ${SOCKADDR_HEADERS} netinet/in.h)
     endif()
 
     if (EVENT__HAVE_NETINET_IN6_H)
-        list(append SOCKADDR_HEADERS netinet/in6.h)
+        set(SOCKADDR_HEADERS ${SOCKADDR_HEADERS} netinet/in6.h)
     endif()
 
     if (EVENT__HAVE_SYS_SOCKET_H)
-        list(append SOCKADDR_HEADERS sys/socket.h)
+        set(SOCKADDR_HEADERS ${SOCKADDR_HEADERS} sys/socket.h)
     endif()
 
     if (EVENT__HAVE_NETDB_H)
-        list(append SOCKADDR_HEADERS netdb.h)
+        set(SOCKADDR_HEADERS ${SOCKADDR_HEADERS} netdb.h)
     endif()
 endif()
 
