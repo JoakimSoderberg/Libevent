@@ -43,15 +43,16 @@ cmake_minimum_required(VERSION 2.6.0 FATAL_ERROR)
 # get rid of the extra default configurations
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Limited configurations" FORCE)
 
-project(libevent2)
+project(libevent)
 
-set(EVENT_NUMERIC_VERSION 0x02010101)
-set(EVENT_VERSION "2.1.1-alpha")
+set(EVENT_NUMERIC_VERSION 0x02010201)
+set(EVENT_VERSION "2.1.2-alpha-dev")
 set(EVENT_PACKAGE_VERSION "")
 
 OPTION(EVENT__DISABLE_DEBUG_MODE "Define if libevent should build without support for a debug mode" 0)
 OPTION(EVENT__DISABLE_MM_REPLACEMENT "Define if libevent should not allow replacing the mm functions" 0)
 OPTION(EVENT__DISABLE_THREAD_SUPPORT "Define if libevent should not be compiled with thread support" 0)
+OPTION(EVENT__DISABLE_OPENSSL "Define if libevent should build without support for OpenSSL encrpytion" 0)
 
 # Put the libaries and binaries that get built into directories at the
 # top of the build tree rather than in hard-to-find leaf directories. 
@@ -74,8 +75,8 @@ include(CheckPrototypeDefinition)
 
 include(FindZLIB)    # -> HAVE_LIBZ
 include(FindThreads) # -> HAVE_PTHREAD
-#include(FindOpenSSL)
-include(FindPythonInterp) 
+include(FindOpenSSL)
+include(FindPythonInterp)
 
 if(WIN32)
     set(CMAKE_EXTRA_INCLUDE_FILES winsock2.h ws2tcpip.h)
@@ -83,17 +84,7 @@ if(WIN32)
     set(CMAKE_REQUIRED_DEFINITIONS -FIwinsock2.h -FIws2tcpip.h)
 endif()
 
-# TODO: Check for GNU_SOURCE properly, this doesn't work...
-#check_c_source_compiles("
-#	#include <features.h>
-#	#ifndef __GNU_LIBRARY__
-#	#error no gnu here
-#	#endif
-#    int main(int argc, char **argv)
-#    {
-#        return 0;
-#    }
-#	" _GNU_SOURCE)
+# Check if _GNU_SOURCE is available.
 CHECK_SYMBOL_EXISTS(__GNU_LIBRARY__ "features.h" _GNU_SOURCE)
 
 if (_GNU_SOURCE)
@@ -262,23 +253,49 @@ CHECK_TYPE_SIZE("long" EVENT__SIZEOF_LONG BUILTIN_TYPES_ONLY)
 CHECK_TYPE_SIZE("long long" EVENT__SIZEOF_LONG_LONG BUILTIN_TYPES_ONLY)
 
 if(WIN32)
-    set(EVENT____func__ __FUNCTION__)
-    set(EVENT__inline   __inline)
-	
 	# These aren't available until Windows Vista.
 	# But you can still link them. They just won't be found when running the exe.
 	set(EVENT__HAVE_INET_NTOP 0)
 	set(EVENT__HAVE_INET_PTON 0)
-else()
-    CHECK_SYMBOL_EXISTS(__func__ "stdio.h" HAVE__func__)
-    CHECK_SYMBOL_EXISTS(__func__ "stdio.h" HAVE__inline__)
+endif()
 
-    if (NOT HAVE__func__)
-        set(EVENT____func__ __func__)
-    endif()
+# Check for different inline keyword versions.
+foreach(KEYWORD "inline" "__inline__" "__inline")
+    set(CMAKE_REQUIRED_DEFINITIONS "-DKEYWORD=${KEYWORD}")
+    CHECK_C_SOURCE_COMPILES(
+        "
+        #include <stdio.h>
+        KEYWORD void a() {}
+        int main(int argc, char **argv) { a(); return 0; }
+        " HAVE_${KEYWORD})
+endforeach()
 
-    if (NOT HAVE__inline__)
+if (NOT HAVE_inline)
+    if (HAVE___inline__)
         set(EVENT__inline __inline__)
+    elseif(HAVE___inline)
+        set(EVENT__inline __inline)
+    endif()
+endif()
+set(CMAKE_REQUIRED_DEFINITIONS "")
+
+# Check for different function name macros.
+foreach(KEYWORD "__func__" "__FUNCTION__")
+    set(CMAKE_REQUIRED_DEFINITIONS "-DKEYWORD=${KEYWORD}")
+    CHECK_C_SOURCE_COMPILES(
+        "
+        #include <stdio.h>
+        int main(int argc, char **argv) { const char *cp = KEYWORD; return 0; }
+        " HAVE_${KEYWORD})
+endforeach()
+set(CMAKE_REQUIRED_DEFINITIONS "")
+
+if (NOT HAVE__func__)
+    if (HAVE___FUNCTION__)
+        set(EVENT____func__ __FUNCTION__)
+    else()
+        # Substitute for __func__
+        set(EVENT____func__ __FILE__)
     endif()
 endif()
 
@@ -351,26 +368,54 @@ elseif(WIN32)
 	CHECK_TYPE_SIZE("struct addrinfo" EVENT__HAVE_STRUCT_ADDRINFO)
 endif()
 
-# TODO: Fix this for platforms other than Windows..
+# Check for sockaddr structure sizes.
+set(SOCKADDR_HEADERS)
+
+if (WIN32)
+    set(CMAKE_REQUIRED_DEFINITIONS "-DWIN32_LEAN_AND_MEAN")
+    if (_MSC_VER LESS 1300)
+        set(SOCKADDR_HEADERS winsock.h)
+    else()
+        set(SOCKADDR_HEADERS winsock2.h ws2tcpip.h)
+    endif()
+else()
+    if (EVENT__HAVE_NETINET_IN_H)
+        list(append SOCKADDR_HEADERS netinet/in.h)
+    endif()
+
+    if (EVENT__HAVE_NETINET_IN6_H)
+        list(append SOCKADDR_HEADERS netinet/in6.h)
+    endif()
+
+    if (EVENT__HAVE_SYS_SOCKET_H)
+        list(append SOCKADDR_HEADERS sys/socket.h)
+    endif()
+
+    if (EVENT__HAVE_NETDB_H)
+        list(append SOCKADDR_HEADERS netdb.h)
+    endif()
+endif()
+
 CHECK_TYPE_SIZE("struct in6_addr" EVENT__HAVE_STRUCT_IN6_ADDR)
 if(EVENT__HAVE_STRUCT_IN6_ADDR)
-	CHECK_STRUCT_HAS_MEMBER("struct in6_addr" s6_addr16 ws2tcpip.h EVENT__HAVE_STRUCT_IN6_ADDR_S6_ADDR16)
-	CHECK_STRUCT_HAS_MEMBER("struct in6_addr" s6_addr32 ws2tcpip.h EVENT__HAVE_STRUCT_IN6_ADDR_S6_ADDR32)
+	CHECK_STRUCT_HAS_MEMBER("struct in6_addr" s6_addr16 "${SOCKADDR_HEADERS}" EVENT__HAVE_STRUCT_IN6_ADDR_S6_ADDR16)
+	CHECK_STRUCT_HAS_MEMBER("struct in6_addr" s6_addr32 "${SOCKADDR_HEADERS}" EVENT__HAVE_STRUCT_IN6_ADDR_S6_ADDR32)
 endif()
 
 CHECK_TYPE_SIZE("sa_family_t" EVENT__HAVE_SA_FAMILY_T)
 CHECK_TYPE_SIZE("struct sockaddr_in6" EVENT__HAVE_STRUCT_SOCKADDR_IN6)
 if(EVENT__HAVE_STRUCT_SOCKADDR_IN6)
-	CHECK_STRUCT_HAS_MEMBER("struct sockaddr_in6" sin6_len ws2tcpip.h EVENT__HAVE_STRUCT_SOCKADDR_IN6_SIN6_LEN)
-	CHECK_STRUCT_HAS_MEMBER("struct sockaddr_in6" sin_len ws2tcpip.h EVENT__HAVE_STRUCT_SOCKADDR_IN_SIN_LEN)
+	CHECK_STRUCT_HAS_MEMBER("struct sockaddr_in6" sin6_len "${SOCKADDR_HEADERS}" EVENT__HAVE_STRUCT_SOCKADDR_IN6_SIN6_LEN)
+	CHECK_STRUCT_HAS_MEMBER("struct sockaddr_in6" sin_len "${SOCKADDR_HEADERS}" EVENT__HAVE_STRUCT_SOCKADDR_IN_SIN_LEN)
 endif()
 
 CHECK_TYPE_SIZE("struct sockaddr_storage" EVENT__HAVE_STRUCT_SOCKADDR_STORAGE)
 if(EVENT__HAVE_STRUCT_SOCKADDR_STORAGE)
-	CHECK_STRUCT_HAS_MEMBER("struct sockaddr_storage" ss_family ws2tcpip.h EVENT__HAVE_STRUCT_SOCKADDR_STORAGE_SS_FAMILY)
-	CHECK_STRUCT_HAS_MEMBER("struct sockaddr_storage" __ss_family ws2tcpip.h EVENT__HAVE_STRUCT_SOCKADDR_STORAGE___SS_FAMILY)
+	CHECK_STRUCT_HAS_MEMBER("struct sockaddr_storage" ss_family "${SOCKADDR_HEADERS}" EVENT__HAVE_STRUCT_SOCKADDR_STORAGE_SS_FAMILY)
+	CHECK_STRUCT_HAS_MEMBER("struct sockaddr_storage" __ss_family "${SOCKADDR_HEADERS}" EVENT__HAVE_STRUCT_SOCKADDR_STORAGE___SS_FAMILY)
 endif()
 
+# Group the source files.
 set(HDR_PRIVATE
     bufferevent-internal.h
     changelist-internal.h
@@ -519,17 +564,17 @@ configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/event-config.h.cmake 
     ${CMAKE_CURRENT_SOURCE_DIR}/include/event2/event-config.h)
 
-add_library(event2_core STATIC
+add_library(libevent_core STATIC
     ${HDR_PRIVATE}
     ${HDR_PUBLIC}
     ${SRC_CORE}
     )
     
-add_library(event2_extras STATIC
+add_library(libevent_extras STATIC
     ${SRC_EXTRA}
     )
     
-add_library(event2 STATIC
+add_library(libevent STATIC
     ${HDR_PRIVATE}
     ${HDR_PUBLIC}
     ${SRC_CORE}
@@ -538,63 +583,75 @@ add_library(event2 STATIC
 
 # TODO: Make these into tests instead?
 #add_executable(event-test sample/event-test.c)
-#target_link_libraries(event-test event2 ${LIB_PLATFORM})
+#target_link_libraries(event-test libevent ${LIB_PLATFORM})
 
 add_executable(time-test sample/time-test.c)
-target_link_libraries(time-test event2 ${LIB_PLATFORM})
+target_link_libraries(time-test libevent ${LIB_PLATFORM})
 
 add_executable(signal-test sample/signal-test.c)
-target_link_libraries(signal-test event2 ${LIB_PLATFORM})
+target_link_libraries(signal-test libevent ${LIB_PLATFORM})
 
 #add_executable(test-init test/test-init.c)
-#target_link_libraries(test-init event2 ${LIB_PLATFORM})
+#target_link_libraries(test-init libevent ${LIB_PLATFORM})
 
 #add_executable(test-eof test/test-eof.c)
-#target_link_libraries(test-eof event2 ${LIB_PLATFORM})
+#target_link_libraries(test-eof libevent ${LIB_PLATFORM})
 
 #add_executable(test-weof test/test-weof.c)
-#target_link_libraries(test-weof event2 ${LIB_PLATFORM})
+#target_link_libraries(test-weof libevent ${LIB_PLATFORM})
 
 #add_executable(time-test test/time-test.c)
-#target_link_libraries(time-test event2 ${LIB_PLATFORM})
+#target_link_libraries(time-test libevent ${LIB_PLATFORM})
 
-# TODO: Only add this if Python is available
-add_definitions(-DTINYTEST_LOCAL)
-add_custom_command(
-    OUTPUT 
-        ${CMAKE_CURRENT_SOURCE_DIR}/test/regress.gen.c 
-        ${CMAKE_CURRENT_SOURCE_DIR}/test/regress.gen.h
-    DEPENDS 
-        event_rpcgen.py
-        test/regress.rpc 
-    COMMAND ${PYTHON_EXECUTABLE} ../event_rpcgen.py regress.rpc 
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test
-    )
+if (PYTHONINTERP_FOUND)
+    message("Generating regress tests...")
+    add_definitions(-DTINYTEST_LOCAL)
+    add_custom_command(
+        OUTPUT 
+            ${CMAKE_CURRENT_SOURCE_DIR}/test/regress.gen.c 
+            ${CMAKE_CURRENT_SOURCE_DIR}/test/regress.gen.h
+        DEPENDS 
+            event_rpcgen.py
+            test/regress.rpc 
+        COMMAND ${PYTHON_EXECUTABLE} ../event_rpcgen.py regress.rpc 
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test
+        )
 
-list(APPEND SRC_REGRESS 
-    test/regress.c 
-    test/regress_buffer.c 
-    test/regress_http.c 
-    test/regress_dns.c 
-    test/regress_testutils.c 
-    test/regress_testutils.h 
-    test/regress_rpc.c 
-    test/regress_et.c 
-    test/regress_bufferevent.c 
-    test/regress_listener.c 
-    test/regress_util.c 
-    test/tinytest.c 
-    test/regress_main.c 
-    test/regress_minheap.c
-    test/regress.gen.c
-    test/regress.gen.h
-    )
+    list(APPEND SRC_REGRESS 
+        test/regress.c 
+        test/regress_buffer.c 
+        test/regress_http.c 
+        test/regress_dns.c 
+        test/regress_testutils.c 
+        test/regress_testutils.h 
+        test/regress_rpc.c 
+        test/regress_et.c 
+        test/regress_bufferevent.c 
+        test/regress_listener.c 
+        test/regress_util.c 
+        test/tinytest.c 
+        test/regress_main.c 
+        test/regress_minheap.c
+        test/regress.gen.c
+        test/regress.gen.h
+        )
 
-add_executable(regress ${SRC_REGRESS})
-target_link_libraries(regress event2 ${LIB_REGRESS} ${CMAKE_THREAD_LIBS_INIT} ${LIB_PLATFORM})
+    add_executable(regress ${SRC_REGRESS})
+    target_link_libraries(regress libevent ${LIB_REGRESS} ${CMAKE_THREAD_LIBS_INIT} ${LIB_PLATFORM})
+else()
+    warning("Python not found, cannot generate regress tests!")
+endif()
 
 add_executable(bench_cascade test/bench_cascade.c)
-target_link_libraries(bench_cascade event2 ${LIB_PLATFORM})
+target_link_libraries(bench_cascade libevent ${LIB_PLATFORM})
 
 add_executable(bench_http test/bench_http.c)
-target_link_libraries(bench_http event2 ${LIB_PLATFORM})
+target_link_libraries(bench_http libevent ${LIB_PLATFORM})
+
+# Tests.
+enable_testing()
+
+add_test(regress "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${EXECUTABLE_OUTPUT_PATH}/regress")
+
+include(CTest)
+
