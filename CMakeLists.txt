@@ -53,6 +53,8 @@ OPTION(EVENT__DISABLE_DEBUG_MODE "Define if libevent should build without suppor
 OPTION(EVENT__DISABLE_MM_REPLACEMENT "Define if libevent should not allow replacing the mm functions" 0)
 OPTION(EVENT__DISABLE_THREAD_SUPPORT "Define if libevent should not be compiled with thread support" 0)
 OPTION(EVENT__DISABLE_OPENSSL "Define if libevent should build without support for OpenSSL encrpytion" 0)
+OPTION(EVENT__DISABLE_BENCHMARK "Defines if libevent should build without the benchmark exectuables" 0)
+OPTION(EVENT__DISABLE_TESTS "If tests should be compiled or not" 0)
 
 # Put the libaries and binaries that get built into directories at the
 # top of the build tree rather than in hard-to-find leaf directories. 
@@ -604,55 +606,58 @@ target_link_libraries(signal-test event ${LIB_PLATFORM})
 #add_executable(time-test test/time-test.c)
 #target_link_libraries(time-test event ${LIB_PLATFORM})
 
-if (PYTHONINTERP_FOUND)
-    message("Generating regress tests...")
-    add_definitions(-DTINYTEST_LOCAL)
-    add_custom_command(
-        OUTPUT 
-            ${CMAKE_CURRENT_SOURCE_DIR}/test/regress.gen.c 
-            ${CMAKE_CURRENT_SOURCE_DIR}/test/regress.gen.h
-        DEPENDS 
-            event_rpcgen.py
-            test/regress.rpc 
-        COMMAND ${PYTHON_EXECUTABLE} ../event_rpcgen.py regress.rpc 
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test
-        )
+if (NOT EVENT__DISABLE_BENCHMARK)
+    add_executable(bench_cascade test/bench_cascade.c)
+    target_link_libraries(bench_cascade event ${LIB_PLATFORM})
 
-    list(APPEND SRC_REGRESS 
-        test/regress.c 
-        test/regress_buffer.c 
-        test/regress_http.c 
-        test/regress_dns.c 
-        test/regress_testutils.c 
-        test/regress_testutils.h 
-        test/regress_rpc.c 
-        test/regress_et.c 
-        test/regress_bufferevent.c 
-        test/regress_listener.c 
-        test/regress_util.c 
-        test/tinytest.c 
-        test/regress_main.c 
-        test/regress_minheap.c
-        test/regress.gen.c
-        test/regress.gen.h
-        )
-
-    add_executable(regress ${SRC_REGRESS})
-    target_link_libraries(regress event ${LIB_REGRESS} ${CMAKE_THREAD_LIBS_INIT} ${LIB_PLATFORM})
-else()
-    warning("Python not found, cannot generate regress tests!")
+    add_executable(bench_http test/bench_http.c)
+    target_link_libraries(bench_http event ${LIB_PLATFORM})
 endif()
 
-add_executable(bench_cascade test/bench_cascade.c)
-target_link_libraries(bench_cascade event ${LIB_PLATFORM})
+if (NOT EVENT__DISABLE_TESTS)
+    if (PYTHONINTERP_FOUND)
+        message("Generating regress tests...")
+        add_definitions(-DTINYTEST_LOCAL)
+        add_custom_command(
+            OUTPUT 
+                ${CMAKE_CURRENT_SOURCE_DIR}/test/regress.gen.c 
+                ${CMAKE_CURRENT_SOURCE_DIR}/test/regress.gen.h
+            DEPENDS 
+                event_rpcgen.py
+                test/regress.rpc 
+            COMMAND ${PYTHON_EXECUTABLE} ../event_rpcgen.py regress.rpc 
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test
+            )
 
-add_executable(bench_http test/bench_http.c)
-target_link_libraries(bench_http event ${LIB_PLATFORM})
+        list(APPEND SRC_REGRESS 
+            test/regress.c 
+            test/regress_buffer.c 
+            test/regress_http.c 
+            test/regress_dns.c 
+            test/regress_testutils.c 
+            test/regress_testutils.h 
+            test/regress_rpc.c 
+            test/regress_et.c 
+            test/regress_bufferevent.c 
+            test/regress_listener.c 
+            test/regress_util.c 
+            test/tinytest.c 
+            test/regress_main.c 
+            test/regress_minheap.c
+            test/regress.gen.c
+            test/regress.gen.h
+            )
 
-# Tests.
-enable_testing()
+        add_executable(regress ${SRC_REGRESS})
+        target_link_libraries(regress event ${LIB_REGRESS} ${CMAKE_THREAD_LIBS_INIT} ${LIB_PLATFORM})
+    else()
+        warning("Python not found, cannot generate regress tests!")
+    endif()
 
-add_test(regress "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${EXECUTABLE_OUTPUT_PATH}/regress")
+    # Tests.
+    enable_testing()
 
-include(CTest)
+    add_test(regress "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${EXECUTABLE_OUTPUT_PATH}/regress")
 
+    include(CTest)
+endif()
